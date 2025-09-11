@@ -1,0 +1,40 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma" // оставляем, как есть
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum для роли пользователя
+enum Role {
+  PARENT
+  NANNY
+  ADMIN
+}
+
+// Модель пользователя Telegram
+model User {
+  id        Int      @id @default(autoincrement())  // уникальный ID
+  chatId    String   @unique                       // уникальный Telegram chat ID
+  username  String?                                 // никнейм (необязательное поле)
+  role      Role  @default(PARENT)                                  // роль пользователя
+  createdAt DateTime @default(now())               // дата создания
+  profile   Profile?                                // связь с профилем (1:1)
+}
+
+// Модель профиля (например, для няни)
+model Profile {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int      @unique
+  name      String
+  experience String?
+  skills    String?
+  price     Float?
+  area      String?
+}
