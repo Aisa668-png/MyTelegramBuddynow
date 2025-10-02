@@ -340,8 +340,18 @@ export class BotService implements OnModuleInit {
             {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: 'Найти няню', callback_data: 'search_nanny' }],
-                  [{ text: 'Добавить ребёнка', callback_data: 'add_child' }],
+                  [
+                    {
+                      text: '👶 Создать заказ',
+                      callback_data: 'create_order',
+                    },
+                  ],
+                  [
+                    {
+                      text: 'Отредактировать профиль',
+                      callback_data: 'edit_profile',
+                    },
+                  ],
                 ],
               },
             },
@@ -402,12 +412,12 @@ export class BotService implements OnModuleInit {
           if (user?.role === Role.PARENT) {
             const parentFsm = await this.usersService.getParentFSM(chatId);
 
-            const invalid =
+            /*const invalid =
               !parentFsm ||
               !parentFsm.trim() ||
-              ['null', 'undefined'].includes(parentFsm.trim());
+              ['null', 'undefined'].includes(parentFsm.trim());*/
 
-            if (!invalid && parentFsm !== 'FINISH') {
+            if (parentFsm && parentFsm !== 'FINISH') {
               // есть незавершённый процесс — резюмируем
               await this.handleParentMessage(chatId, '');
               return;
@@ -753,6 +763,7 @@ export class BotService implements OnModuleInit {
 
         // 🔹 Родитель
         if (user.role === Role.PARENT) {
+          const fsmParent = await this.usersService.getParentFSM(chatId);
           switch (query.data) {
             case 'edit_profile':
               await this.bot.sendMessage(chatId, 'Что вы хотите сделать?', {
@@ -868,7 +879,9 @@ export class BotService implements OnModuleInit {
               break;
 
             default:
-              await this.handleParentMessage(chatId, '');
+              if (!fsmParent) {
+                await this.handleParentMessage(chatId, '');
+              }
           }
 
           await this.bot.answerCallbackQuery(query.id);
@@ -1048,19 +1061,41 @@ export class BotService implements OnModuleInit {
           };
           await this.bot.sendMessage(
             chatId,
-            `${updatedUser.fullName || updatedUser.username}, Здравствуйте!Пока мы не нашли вашу анкету в нашей базе,но это легко исправить!Что бы стать частью нашей команды нянь,пожалуйста,заполните анкету.Это займет 5 минут.После этого мы внимательно изучим вашу заявку(обычно это занимает до 24 часов)и сразу свяжемся с вами для приглашения в сервис.Пока вы ждете,предлагаем узнать больше о том , как мы работаем. `,
+            `${updatedUser.fullName || updatedUser.username}, Здравствуйте! Пока мы не нашли вашу анкету в нашей базе, но это легко исправить! Чтобы стать частью нашей команды нянь, пожалуйста, заполните анкету. Это займет 5 минут. После этого мы внимательно изучим вашу заявку (обычно это занимает до 24 часов) и сразу свяжемся с вами. Пока вы ждете, предлагаем узнать больше о том, как мы работаем.`,
             options,
           );
           return;
         }
+
         if (updatedUser.role === Role.PARENT) {
+          const fsmParent = await this.usersService.getParentFSM(chatId);
+
+          if (fsmParent === 'EDIT_PARENT_PHONE') {
+            // Пользователь редактирует телефон — сразу идём на ввод ФИО
+            await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
+            await this.bot.sendMessage(
+              chatId,
+              '✅ Номер успешно обновлён! Теперь введите ваше ФИО:',
+            );
+            return;
+          }
+
+          if (!fsmParent) {
+            // Новая регистрация — FSM на ввод имени
+            await this.usersService.setParentFSM(chatId, 'ASK_NAME');
+            await this.bot.sendMessage(chatId, 'Пожалуйста, введите ваше ФИО:');
+            return;
+          }
+
+          // Если FSM уже был — продолжаем текущий процесс
           await this.handleParentMessage(chatId, '', false, msg.contact);
           return;
         }
 
+        // 🔹 На всякий случай, если роль неизвестна
         await this.bot.sendMessage(
           chatId,
-          'Спасибо! Назовите,пожалуйста, ваше имя?',
+          'Спасибо! Назовите, пожалуйста, ваше имя?',
         );
       } catch (error) {
         console.error('Error in contact handler:', error);
@@ -1077,120 +1112,41 @@ export class BotService implements OnModuleInit {
         if (!user) return;
 
         const fsmNanny = await this.usersService.getNannyFSM(chatId);
-
         const fsmParent = await this.usersService.getParentFSM(chatId);
 
-        // Проверка, есть ли текст или медиа
+        if (fsmParent === 'EDIT_PARENT_NAME') {
+          if (text) {
+            await this.usersService.saveParentName(user.id, text);
+            await this.usersService.setParentFSM(chatId, null);
+            await this.bot.sendMessage(
+              chatId,
+              '✅ Ваши данные успешно обновлены!',
+            );
+          } else {
+            await this.bot.sendMessage(
+              chatId,
+              'Пожалуйста, введите ваше ФИО текстом.',
+            );
+          }
+          return; // останавливаем дальнейшую обработку
+        }
+
+        // 🔹 Проверка текста или медиа
         const hasText = text && !text.startsWith('/');
         const hasMedia =
           msg.photo?.length > 0 ||
           (msg.document && msg.document.mime_type?.startsWith('image/'));
         if (!hasText && !hasMedia) return;
 
-        if (user.role === Role.PARENT) {
-          const fsmParent = await this.usersService.getParentFSM(chatId);
-
-          // 🔹 Редактирование телефона
-          if (fsmParent === 'EDIT_PARENT_PHONE') {
-            if (msg.contact?.phone_number) {
-              await this.usersService.savePhoneNumber(
-                user.id,
-                msg.contact.phone_number,
-              );
-              await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
-              await this.bot.sendMessage(
-                chatId,
-                '✅ Номер успешно обновлён! Теперь введите ваше ФИО:',
-              );
-            } else {
-              await this.bot.sendMessage(
-                chatId,
-                'Пожалуйста, используйте кнопку "Поделиться номером" для корректного номера.',
-              );
-            }
-            return; // останавливаем дальнейшую обработку
-          }
-
-          // 🔹 Редактирование ФИО
-          if (fsmParent === 'EDIT_PARENT_NAME') {
-            if (text) {
-              await this.usersService.saveParentName(user.id, text);
-              await this.usersService.setParentFSM(chatId, null);
-              await this.bot.sendMessage(
-                chatId,
-                '✅ Ваши данные успешно обновлены!',
-              );
-            } else {
-              await this.bot.sendMessage(
-                chatId,
-                'Пожалуйста, введите ваше ФИО текстом.',
-              );
-            }
-            return; // останавливаем дальнейшую обработку
-          }
-
-          // 🔹 Любая другая логика родителей
+        // 🔹 Логика для родителей
+        if (user.role === Role.PARENT && !fsmParent) {
           if (text) {
             await this.handleParentMessage(chatId, text);
           }
           return;
         }
 
-        /* if (fsmParent === 'ASK_CHILD_NAME') {
-        const child = await this.usersService.saveChild(user.id, {
-          name: text,
-        });
-        await this.usersService.setParentFSM(
-          chatId,
-          `ASK_CHILD_AGE:${child.id}`,
-        );
-        await this.bot.sendMessage(chatId, 'Укажите возраст вашего ребёнка:');
-        return;
-      }
-
-      if (fsmParent?.startsWith('ASK_CHILD_AGE')) {
-        const childId = Number(fsmParent.split(':')[1]);
-        await this.usersService.updateChild(childId, { age: parseInt(text) });
-        await this.usersService.setParentFSM(
-          chatId,
-          `ASK_CHILD_NOTES:${childId}`,
-        );
-        await this.bot.sendMessage(
-          chatId,
-          'Есть ли важные особенности, которые нужно знать няне?(аллергии,заболевания,особенности поведения).Напишите о них в одном сообщении.Это поле необязательное, но очень важное.Если хотите пропустить этот пункт, нажмите кнопку.',
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: 'Пропустить', callback_data: 'skip_child_notes' }],
-              ],
-            },
-          },
-        );
-        return;
-      }
-
-
-      if (fsmParent?.startsWith('ASK_CHILD_NOTES')) {
-        const childId = Number(fsmParent.split(':')[1]);
-        const child = await this.usersService.updateChild(childId, {
-          notes: text,
-        });
-        await this.usersService.setParentFSM(chatId, null);
-        await this.bot.sendMessage(
-          chatId,
-          `Готово! Теперь ${child.name} добавлен в ваш профиль родителя.Найдем няню?🔴 *ИНформация о том что первый раз услуги сервиса предоставляются бесплатно*`,
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: 'Найти няню', callback_data: 'search_nanny' }],
-              ],
-            },
-          },
-        );
-        return;
-      }*/
-
-        // Кастомная ставка
+        // 🔹 Логика FSM няни
         if (fsmNanny === 'ASK_RATE_CUSTOM' && text) {
           const rate = parseInt(text, 10);
           if (!isNaN(rate)) {
@@ -1208,31 +1164,21 @@ export class BotService implements OnModuleInit {
           return;
         }
 
-        // Фото
+        // 🔹 Фото для няни
         let photoId: string | undefined;
-
         if (msg.photo?.length) {
-          // Фото отправлено как обычное изображение (телефон)
           photoId = msg.photo[msg.photo.length - 1].file_id;
         } else if (msg.document) {
-          // Фото отправлено как файл (Desktop/Web)
           const docMime = msg.document.mime_type?.toLowerCase();
-
-          // Если MIME неизвестен или начинается с "image/", считаем это фото
           if (!docMime || docMime.startsWith('image/')) {
             photoId = msg.document.file_id;
-          } else {
-            console.log('Документ не является изображением:', docMime);
           }
         }
 
-        // Используем photoId только если нашли
         if (fsmNanny === 'ASK_PHOTO' && photoId) {
-          console.log('FSM ASK_PHOTO сработал, photoId:', photoId);
-          const updated = await this.usersService.updateNannyProfile(user.id, {
+          await this.usersService.updateNannyProfile(user.id, {
             avatar: photoId,
           });
-          console.log('Результат обновления профиля:', updated);
           await this.usersService.setNannyFSM(chatId, null);
           await this.bot.sendMessage(
             chatId,
@@ -1252,13 +1198,7 @@ export class BotService implements OnModuleInit {
           );
         }
 
-        /* if (fsmParent?.startsWith('ASK_CHILD')) {
-          // обработка добавления ребёнка
-        }*/
-
-        // === FSM логика анкеты няни ===
-
-        // ФИО
+        // 🔹 FSM няни — ФИО
         if (fsmNanny === 'ASK_NAME' && text) {
           await this.usersService.updateNannyProfile(user.id, { name: text });
           await this.usersService.setNannyFSM(chatId, 'ASK_DOB');
@@ -1269,7 +1209,7 @@ export class BotService implements OnModuleInit {
           return;
         }
 
-        // Дата рождения
+        // 🔹 FSM няни — Дата рождения
         if (fsmNanny === 'ASK_DOB' && text) {
           const success = await this.usersService.updateDob(user.id, text);
           if (!success) {
@@ -1279,7 +1219,6 @@ export class BotService implements OnModuleInit {
             );
             return;
           }
-
           await this.usersService.setNannyFSM(chatId, 'ASK_OCCUPATION');
           await this.bot.sendMessage(
             chatId,
@@ -1288,7 +1227,7 @@ export class BotService implements OnModuleInit {
           return;
         }
 
-        // Род деятельности
+        // 🔹 FSM няни — Род деятельности
         if (fsmNanny === 'ASK_OCCUPATION' && text) {
           await this.usersService.updateNannyProfile(user.id, {
             occupation: text,
