@@ -4,7 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BotModule } from './bot/bot.module';
 import { UsersModule } from './users/users.module';
-
+import { PrismaModule } from './prisma/prisma.module';
 @Module({
   imports: [
     // Подключаем ConfigModule глобально
@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
     }),
     BotModule,
     UsersModule, // твой модуль бота
+    PrismaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

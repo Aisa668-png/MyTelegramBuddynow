@@ -1,8 +1,7 @@
 // prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma" // оставляем, как есть
+  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -17,24 +16,69 @@ enum Role {
   ADMIN
 }
 
+enum ProfileStatus {
+  PENDING
+  APPROVED
+  REJECTED
+   VERIFIED
+}
+
 // Модель пользователя Telegram
 model User {
-  id        Int      @id @default(autoincrement())  // уникальный ID
-  chatId    String   @unique                       // уникальный Telegram chat ID
-  username  String?                                 // никнейм (необязательное поле)
-  role      Role  @default(PARENT)                                  // роль пользователя
-  createdAt DateTime @default(now())               // дата создания
-  profile   Profile?                                // связь с профилем (1:1)
+  id        Int      @id @default(autoincrement())
+  chatId    String   @unique
+  username  String?
+  fullName  String?
+  phone     String?
+  role      Role     @default(PARENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // FSM состояния
+  fsmStateParent String?
+  fsmStateNanny  String?
+
+  consentGiven Boolean @default(false)
+  
+  // Relations
+  profile  Profile?
+  children Child[]
 }
 
 // Модель профиля (например, для няни)
 model Profile {
   id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    Int      @unique
-  name      String
+  name      String?
   experience String?
-  skills    String?
+  skills    String[]  // ✅ Исправлено - массив строк
   price     Float?
   area      String?
+  
+  // Дополнительные поля
+  avatar    String?
+  dob       DateTime?
+  occupation String?
+  hasMedCard Boolean @default(false)
+  status    ProfileStatus @default(PENDING)
+  firstLoginAfterVerification Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Модель ребенка
+model Child {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  name   String
+  age    Int?
+  notes  String?
+  
+  // Relation
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // ✅ ДОБАВЬТЕ временные метки
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
