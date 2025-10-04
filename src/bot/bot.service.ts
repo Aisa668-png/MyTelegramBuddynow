@@ -1054,6 +1054,27 @@ export class BotService implements OnModuleInit {
           return;
         }
         if (updatedUser.role === Role.PARENT) {
+          // Проверяем, редактирование или обычная регистрация
+          const fsm = await this.usersService.getParentFSM(chatId);
+
+          if (fsm === 'EDIT_PARENT_PHONE') {
+            // сохраняем номер
+            await this.usersService.savePhoneNumber(
+              updatedUser.id,
+              msg.contact.phone_number,
+            );
+
+            // ставим следующий шаг редактирования — ФИО
+            await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
+
+            // сразу отправляем сообщение про ФИО
+            await this.bot.sendMessage(
+              chatId,
+              '✅ Номер успешно обновлён! Теперь введите ваше ФИО:',
+            );
+
+            return; // больше ничего не вызываем
+          }
           await this.handleParentMessage(chatId, '', false, msg.contact);
           return;
         }
@@ -1085,10 +1106,11 @@ export class BotService implements OnModuleInit {
         const hasMedia =
           msg.photo?.length > 0 ||
           (msg.document && msg.document.mime_type?.startsWith('image/'));
-        if (!hasText && !hasMedia) return;
+        const hasContact = !!msg.contact;
+        if (!hasText && !hasMedia && !hasContact) return;
 
         if (user.role === Role.PARENT) {
-          const fsmParent = await this.usersService.getParentFSM(chatId);
+          //const fsmParent = await this.usersService.getParentFSM(chatId);
 
           // 🔹 Редактирование телефона
           if (fsmParent === 'EDIT_PARENT_PHONE') {
@@ -1098,10 +1120,10 @@ export class BotService implements OnModuleInit {
                 msg.contact.phone_number,
               );
               await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
-              await this.bot.sendMessage(
+              /*await this.bot.sendMessage(
                 chatId,
                 '✅ Номер успешно обновлён! Теперь введите ваше ФИО:',
-              );
+              );*/
             } else {
               await this.bot.sendMessage(
                 chatId,
@@ -1120,17 +1142,17 @@ export class BotService implements OnModuleInit {
                 chatId,
                 '✅ Ваши данные успешно обновлены!',
               );
-            } else {
+            } /*else {
               await this.bot.sendMessage(
                 chatId,
                 'Пожалуйста, введите ваше ФИО текстом.',
               );
-            }
+            }*/
             return; // останавливаем дальнейшую обработку
           }
 
           // 🔹 Любая другая логика родителей
-          if (text) {
+          if (!fsmParent?.startsWith('EDIT_') && text) {
             await this.handleParentMessage(chatId, text);
           }
           return;
