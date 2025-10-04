@@ -1068,15 +1068,33 @@ export class BotService implements OnModuleInit {
         }
 
         if (updatedUser.role === Role.PARENT) {
+<<<<<<< HEAD
           const fsmParent = await this.usersService.getParentFSM(chatId);
 
           if (fsmParent === 'EDIT_PARENT_PHONE') {
             // Пользователь редактирует телефон — сразу идём на ввод ФИО
             await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
+=======
+          // Проверяем, редактирование или обычная регистрация
+          const fsm = await this.usersService.getParentFSM(chatId);
+
+          if (fsm === 'EDIT_PARENT_PHONE') {
+            // сохраняем номер
+            await this.usersService.savePhoneNumber(
+              updatedUser.id,
+              msg.contact.phone_number,
+            );
+
+            // ставим следующий шаг редактирования — ФИО
+            await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
+
+            // сразу отправляем сообщение про ФИО
+>>>>>>> temp-save
             await this.bot.sendMessage(
               chatId,
               '✅ Номер успешно обновлён! Теперь введите ваше ФИО:',
             );
+<<<<<<< HEAD
             return;
           }
 
@@ -1088,6 +1106,11 @@ export class BotService implements OnModuleInit {
           }
 
           // Если FSM уже был — продолжаем текущий процесс
+=======
+
+            return; // больше ничего не вызываем
+          }
+>>>>>>> temp-save
           await this.handleParentMessage(chatId, '', false, msg.contact);
           return;
         }
@@ -1136,15 +1159,45 @@ export class BotService implements OnModuleInit {
         const hasMedia =
           msg.photo?.length > 0 ||
           (msg.document && msg.document.mime_type?.startsWith('image/'));
-        if (!hasText && !hasMedia) return;
+        const hasContact = !!msg.contact;
+        if (!hasText && !hasMedia && !hasContact) return;
 
-        // 🔹 Логика для родителей
-        if (user.role === Role.PARENT && !fsmParent) {
-          if (text) {
-            await this.handleParentMessage(chatId, text);
-          }
-          return;
-        }
+if (user.role === Role.PARENT) {
+  const fsmParent = await this.usersService.getParentFSM(chatId);
+
+  // 🔹 Редактирование телефона
+  if (fsmParent === 'EDIT_PARENT_PHONE') {
+    if (msg.contact?.phone_number) {
+      await this.usersService.savePhoneNumber(user.id, msg.contact.phone_number);
+      await this.usersService.setParentFSM(chatId, 'EDIT_PARENT_NAME');
+      // Сообщение про ФИО можно показывать или нет
+      // await this.bot.sendMessage(chatId, '✅ Номер успешно обновлён! Теперь введите ваше ФИО:');
+    } else {
+      await this.bot.sendMessage(
+        chatId,
+        'Пожалуйста, используйте кнопку "Поделиться номером" для корректного номера.',
+      );
+    }
+    return; // останавливаем дальнейшую обработку
+  }
+
+  // 🔹 Редактирование ФИО
+  if (fsmParent === 'EDIT_PARENT_NAME') {
+    if (text) {
+      await this.usersService.saveParentName(user.id, text);
+      await this.usersService.setParentFSM(chatId, null);
+      await this.bot.sendMessage(chatId, '✅ Ваши данные успешно обновлены!');
+    }
+    return;
+  }
+
+  // 🔹 Любая другая логика родителей
+  if (!fsmParent?.startsWith('EDIT_') && text) {
+    await this.handleParentMessage(chatId, text);
+  }
+
+  return;
+}
 
         // 🔹 Логика FSM няни
         if (fsmNanny === 'ASK_RATE_CUSTOM' && text) {
