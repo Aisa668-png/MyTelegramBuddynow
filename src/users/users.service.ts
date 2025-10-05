@@ -31,7 +31,9 @@ export class UsersService {
 
     // Создаём профиль только для няни, если его нет
     if (role === Role.NANNY && !user.profile) {
-      await this.prisma.profile.create({ data: { userId: user.id } });
+      await this.prisma.profile.create({
+        data: { userId: user.id, status: ProfileStatus.NEW },
+      });
     }
 
     return this.getByChatId(chatId);

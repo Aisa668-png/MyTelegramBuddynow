@@ -582,6 +582,38 @@ export class BotService implements OnModuleInit {
             }
 
             const profile = user.profile;
+            if (!profile.status || profile.status === ProfileStatus.NEW) {
+              const options: SendMessageOptions = {
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: 'Заполнить анкету',
+                        callback_data: 'fill_profile',
+                      },
+                    ],
+                    [
+                      {
+                        text: 'Что такое Помогатор',
+                        callback_data: 'what_is_pomogator',
+                      },
+                    ],
+                    [
+                      {
+                        text: 'Связаться с поддержкой',
+                        callback_data: 'contact_support',
+                      },
+                    ],
+                  ],
+                },
+              };
+              await this.bot.sendMessage(
+                chatId,
+                'Добро пожаловать! Пожалуйста, заполните анкету:',
+                options,
+              );
+              return; // теперь return здесь — корректно завершает обработку для NEW
+            }
 
             // 🔹 Проверка статуса анкеты няни
             if (profile.status === ProfileStatus.PENDING) {

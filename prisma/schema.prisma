@@ -17,6 +17,7 @@ enum Role {
 }
 
 enum ProfileStatus {
+  NEW
   PENDING
   APPROVED
   REJECTED
