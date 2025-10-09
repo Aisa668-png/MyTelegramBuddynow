@@ -1,0 +1,12 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.validate": ["typescript", "javascript"],
+  "eslint.alwaysShowStatus": true,
+  "eslint.format.enable": true,
+  "prettier.requireConfig": true,
+  "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+}

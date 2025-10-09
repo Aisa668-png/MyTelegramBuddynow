@@ -130,10 +130,7 @@ export class UsersService {
     });
   }
 
-  async saveChild(
-    userId: number,
-    data: { name?: string; age?: number; notes?: string },
-  ) {
+  async saveChild(userId: number, data: { name?: string; age?: number; notes?: string }) {
     // Проверяем, что имя есть и не пустое
     const name = data.name?.trim();
     if (!name) {
@@ -157,10 +154,7 @@ export class UsersService {
   }
 
   // Обновляем существующего ребёнка
-  async updateChild(
-    childId: number,
-    data: { name?: string; age?: number; notes?: string },
-  ) {
+  async updateChild(childId: number, data: { name?: string; age?: number; notes?: string }) {
     return this.prisma.child.update({
       where: { id: childId },
       data,
@@ -173,10 +167,7 @@ export class UsersService {
   }
 
   // 🔹 Установить значение флага
-  async setFirstLoginAfterVerification(
-    userId: number,
-    value: boolean,
-  ): Promise<void> {
+  async setFirstLoginAfterVerification(userId: number, value: boolean): Promise<void> {
     await this.prisma.profile.update({
       where: { userId },
       data: { firstLoginAfterVerification: value },
@@ -232,11 +223,7 @@ export class UsersService {
 
     return true;
   }
-  async saveParentAnswer(
-    userId: number,
-    field: 'fullName' | 'phone',
-    value: string,
-  ) {
+  async saveParentAnswer(userId: number, field: 'fullName' | 'phone', value: string) {
     return this.prisma.user.update({
       where: { id: userId },
       data: { [field]: value },
@@ -265,5 +252,116 @@ export class UsersService {
       where: { id: userId },
       data,
     });
+  }
+  // В UsersService замените эти методы:
+
+  private tempOrderStorage = new Map<string, any>(); // Добавьте это поле в класс
+
+  async setTempOrderData(chatId: string, data: any): Promise<void> {
+    // Сохраняем данные в памяти
+    this.tempOrderStorage.set(chatId, data);
+    console.log('✅ Temp order data saved for chat:', chatId, data);
+  }
+
+  async getTempOrderData(chatId: string): Promise<any> {
+    // Получаем данные из памяти
+    const data = this.tempOrderStorage.get(chatId) || {};
+    console.log('📋 Temp order data retrieved for chat:', chatId, data);
+    return data;
+  }
+
+  async clearTempOrderData(chatId: string): Promise<void> {
+    // Очищаем данные
+    this.tempOrderStorage.delete(chatId);
+    console.log('🧹 Temp order data cleared for chat:', chatId);
+  }
+
+  async createOrder(userId: string, orderData: any): Promise<any> {
+    // Временная реализация создания заказа
+    console.log('🛒 Creating order for user:', userId, orderData);
+
+    // Здесь позже добавите сохранение в базу данных
+    // return this.prisma.order.create({
+    //   data: {
+    //     userId: parseInt(userId),
+    //     childName: orderData.child,
+    //     date: orderData.date,
+    //     time: orderData.time,
+    //     tasks: orderData.tasks,
+    //     address: orderData.address,
+    //     status: 'PENDING'
+    //   }
+    // });
+
+    return { id: 'temp-order-' + Date.now() };
+  }
+
+  async getUserChildren(userId: string): Promise<any[]> {
+    // Используйте ваш существующий метод getChildrenByParentId
+    // Но преобразуйте userId из string в number
+    const children = await this.getChildrenByParentId(parseInt(userId));
+    console.log('👶 Found children for user:', userId, children);
+    return children;
+  }
+  async getOrderStatus(orderId: string): Promise<string> {
+    // Временная реализация - всегда возвращаем PENDING
+    // Позже замените на реальную логику из базы данных
+    console.log('📊 Getting order status for:', orderId);
+    return 'PENDING';
+  }
+  // В UsersService
+  async getCompletedOrders(parentId: string) {
+    return true;
+  }
+
+  // В UsersService измените на:
+  async saveServiceFeedback(parentId: string, feedback: string) {
+    console.log(`Отзыв о сервисе от пользователя ${parentId}: ${feedback}`);
+    // TODO: Реализовать сохранение в БД
+    return true;
+  }
+
+  async saveNannyFeedback(parentId: string, nannyId: string, feedback: string) {
+    console.log(`Отзыв о няне ${nannyId} от пользователя ${parentId}: ${feedback}`);
+    // TODO: Реализовать сохранение в БД
+    return true;
+  }
+  // В UsersService добавьте:
+  async getActiveOrders(parentId: string) {
+    // Возвращает активные заказы пользователя
+    // Временно возвращаем тестовые данные
+    return [
+      {
+        id: 1,
+        date: '2025-10-10',
+        time: '14:00 - 18:00',
+        child: 'Мария (5 лет)',
+        address: 'ул. Примерная, 123',
+        tasks: 'Присмотр за ребенком, прогулка в парке',
+        status: 'В поиске няни',
+      },
+    ];
+  }
+
+  async getOrderHistory(parentId: string) {
+    // Возвращает историю заказов пользователя
+    // Временно возвращаем тестовые данные
+    return [
+      {
+        id: 2,
+        date: '2025-10-05',
+        time: '10:00 - 14:00',
+        child: 'Алексей (3 года)',
+        address: 'ул. Тестовая, 45',
+        tasks: 'Присмотр, кормление, дневной сон',
+        status: 'Завершен',
+      },
+    ];
+  }
+  // В UsersService
+  async saveUserQuestion(parentId: string, question: string) {
+    console.log(`Вопрос от пользователя ${parentId}: ${question}`);
+    // TODO: Реализовать сохранение в БД или отправку администратору
+    return true;
   }
 }
