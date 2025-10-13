@@ -21,7 +21,31 @@ enum ProfileStatus {
   PENDING
   APPROVED
   REJECTED
-   VERIFIED
+  VERIFIED
+}
+
+// Enum для статусов заказа
+enum OrderStatus {
+  PENDING // В ожидании няни
+  ACCEPTED // Принят няней
+  IN_PROGRESS // В процессе выполнения
+  COMPLETED // Завершен
+  CANCELLED // Отменен
+  EXPIRED // Истек
+}
+
+enum ReportType {
+  PREMATURE_COMPLETION
+  NO_SHOW
+  BAD_BEHAVIOR
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
 }
 
 // Модель пользователя Telegram
@@ -34,52 +58,137 @@ model User {
   role      Role     @default(PARENT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   // FSM состояния
   fsmStateParent String?
   fsmStateNanny  String?
 
   consentGiven Boolean @default(false)
-  
+
+  // Рейтинг и контроль качества
+  avgRating        Decimal?  @db.Decimal(3, 2)
+  totalReviews     Int       @default(0)
+  penaltyPoints    Int       @default(0)
+  isSuspended      Boolean   @default(false)
+  suspendedUntil   DateTime?
+  suspensionReason String?
+
   // Relations
-  profile  Profile?
-  children Child[]
+  profile         Profile?
+  children        Child[]
+  ordersAsParent  Order[]  @relation("OrderToParent")
+  ordersAsNanny   Order[]  @relation("OrderToNanny")
+  reviewsGiven    Review[] @relation("ParentReviews")
+  reviewsReceived Review[] @relation("NannyReviews")
+  reportsFiled    Report[] @relation("UserReports")
 }
 
 // Модель профиля (например, для няни)
 model Profile {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int      @unique
-  name      String?
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int      @unique
+  name       String?
   experience String?
-  skills    String[]  // ✅ Исправлено - массив строк
-  price     Float?
-  area      String?
-  
+  skills     String[] // ✅ Исправлено - массив строк
+  price      Float?
+  area       String?
+
   // Дополнительные поля
-  avatar    String?
-  dob       DateTime?
-  occupation String?
-  hasMedCard Boolean @default(false)
-  status    ProfileStatus @default(PENDING)
-  firstLoginAfterVerification Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  avatar                      String?
+  dob                         DateTime?
+  occupation                  String?
+  hasMedCard                  Boolean       @default(false)
+  status                      ProfileStatus @default(PENDING)
+  firstLoginAfterVerification Boolean       @default(false)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
 }
 
 // Модель ребенка
 model Child {
-  id     Int    @id @default(autoincrement())
+  id     Int     @id @default(autoincrement())
   userId Int
   name   String
   age    Int?
   notes  String?
-  
+
   // Relation
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // ✅ ДОБАВЬТЕ временные метки
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Основная информация о заказе
+  parentId Int
+  date     String // Дата заказа
+  time     String // Время
+  child    String // Информация о ребенке
+  tasks    String? // Задачи
+  address  String // Адрес
+
+  // Статус заказа
+  status OrderStatus @default(PENDING)
+
+  // ID няни (если заказ принят)
+  nannyId Int?
+
+  completedAt DateTime?  // Время завершения заказа
+  parentChatId String?   // chatId родителя для уведомлений
+  nannyChatId  String?   // chatId няни для уведомлений
+
+  // Связи с УКАЗАНИЕМ ИМЕН ОТНОШЕНИЙ
+  parent  User     @relation("OrderToParent", fields: [parentId], references: [id], onDelete: Cascade)
+  nanny   User?    @relation("OrderToNanny", fields: [nannyId], references: [id])
+  review  Review?
+  reports Report[]
+
+  @@map("orders")
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   Int      @unique
+  nanny     User     @relation("NannyReviews", fields: [nannyId], references: [id])
+  nannyId   Int
+  parent    User     @relation("ParentReviews", fields: [parentId], references: [id])
+  parentId  Int
+  rating    Int
+  comment   String?
+
+  @@index([nannyId])
+  @@index([parentId])
+}
+
+model Report {
+  id         Int          @id @default(autoincrement())
+  createdAt  DateTime     @default(now())
+  order      Order        @relation(fields: [orderId], references: [id])
+  orderId    Int
+  reporter   User         @relation("UserReports", fields: [reporterId], references: [id])
+  reporterId Int
+  type       ReportType
+  reason     String
+  status     ReportStatus @default(PENDING)
+
+  @@index([orderId])
+  @@index([reporterId])
+}
+
+model TempOrderData {
+  id        Int      @id @default(autoincrement())
+  chatId    String   @unique
+  data      Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
