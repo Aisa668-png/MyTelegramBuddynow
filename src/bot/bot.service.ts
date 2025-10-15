@@ -335,7 +335,6 @@ export class BotService implements OnModuleInit {
   }
 
   private async handleOrderCreation(chatId: string, text: string, fsmState: string, user: any) {
-    // Получаем или создаем временные данные заказа
     const orderData = (await this.usersService.getTempOrderData(chatId)) || {};
 
     switch (fsmState) {
@@ -352,9 +351,8 @@ export class BotService implements OnModuleInit {
       case 'ORDER_ASK_TIME':
         orderData.time = text;
         await this.usersService.setTempOrderData(chatId, orderData);
-        await this.usersService.setParentFSM(chatId, 'ORDER_ASK_CHILD');
+        await this.usersService.setParentFSM(chatId, 'ORDER_SELECT_CHILD');
 
-        // Получаем детей пользователя для выбора
         const children = await this.usersService.getUserChildren(user.id);
         if (children.length > 0) {
           const childButtons = children.map((child) => [
@@ -368,6 +366,7 @@ export class BotService implements OnModuleInit {
             reply_markup: { inline_keyboard: childButtons },
           });
         } else {
+          await this.usersService.setParentFSM(chatId, 'ORDER_ASK_CHILD');
           await this.bot.sendMessage(chatId, '👶 Укажите имя и возраст ребенка:');
         }
         break;
@@ -382,6 +381,7 @@ export class BotService implements OnModuleInit {
         );
         break;
 
+      // 🔹 ДОБАВЬ ЭТОТ НОВЫЙ CASE ДЛЯ АДРЕСА
       case 'ORDER_ASK_TASKS':
         orderData.tasks = text;
         await this.usersService.setTempOrderData(chatId, orderData);
@@ -389,8 +389,9 @@ export class BotService implements OnModuleInit {
         await this.bot.sendMessage(chatId, '🏠 Укажите адрес куда нужно приехать:');
         break;
 
+      // 🔹 ПЕРЕИМЕНОВАЙ ЭТОТ CASE (сейчас он неправильно назван)
       case 'ORDER_ASK_ADDRESS':
-        orderData.address = text;
+        orderData.address = text; // 🔹 ИСПРАВЬ: было tasks, должно быть address
         await this.usersService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_CONFIRM');
 
@@ -401,9 +402,10 @@ export class BotService implements OnModuleInit {
 👶 Дети: ${orderData.child || 'Не указано'}
 📅 Дата: ${orderData.date || 'Не указано'}
 ⏰ Время: ${orderData.time || 'Не указано'}
+⏱️ Продолжительность: ${orderData.duration || 3} часа
 🏠 Адрес: ${orderData.address || 'Не указано'}
 📝 Задачи: ${orderData.tasks || 'Не указано'}
-      `;
+        `.trim();
 
         await this.bot.sendMessage(chatId, orderSummary.trim(), {
           reply_markup: {
@@ -745,28 +747,42 @@ ${ratingText}
         return;
       }
 
+      // 🔹 ПОЛУЧАЕМ СТАТИСТИКУ НЯНИ
+      const nannyStats = await this.usersService.getNannyStats(nannyId);
       const reviews = await this.usersService.getNannyReviews(nannyId);
 
-      let ratingText = `⭐ *Ваш рейтинг:* ${nanny.avgRating?.toFixed(1) || '0.0'}/5\n`;
-      ratingText += `📊 *На основе отзывов:* ${nanny.totalReviews || 0}\n\n`;
+      // 🔹 ИСПОЛЬЗУЕМ ОДНУ ПЕРЕМЕННУЮ message
+      let message = `⭐ *Ваш рейтинг:* ${nanny.avgRating?.toFixed(1) || '0.0'}/5\n`;
+      message += `📊 *На основе отзывов:* ${nanny.totalReviews || 0}\n\n`;
+
+      // 🔹 ДОБАВЛЯЕМ СТАТИСТИКУ
+      message += `📈 *Ваша статистика:*\n`;
+      message += `✅ Завершено заказов: ${nannyStats.completedOrders}\n`;
+      message += `👨‍👩‍👧‍👦 Обслужено родителей: ${nannyStats.uniqueParents}\n`;
+      message += `🎯 Постоянных клиентов: ${nannyStats.loyalParents}\n`;
+      message += `⏱️ Всего часов с детьми: ${nannyStats.totalHours}\n\n`;
 
       if (reviews.length > 0) {
-        ratingText += `*Последние отзывы:*\n\n`;
+        message += `*Последние отзывы:*\n\n`;
 
         reviews.slice(0, 5).forEach((review, index) => {
           const stars = '⭐'.repeat(review.rating);
           const date = new Date(review.createdAt).toLocaleDateString('ru-RU');
           const parentName = review.parent.fullName || 'Аноним';
-          const comment = review.comment ? `\n💬 ${review.comment}` : '';
 
-          ratingText += `${stars} (${date})\n`;
-          ratingText += `👤 От: ${parentName}${comment}\n\n`;
+          // 🔹 ИСПРАВЛЕНО: используем message вместо ratingText
+          message += `${stars} (${date})\n`;
+          message += `👤 От: ${parentName}\n`;
+          if (review.comment) {
+            message += `💬 ${review.comment}\n`;
+          }
+          message += `\n`;
         });
       } else {
-        ratingText += `Пока нет отзывов. Отзывы появятся здесь после завершения заказов.`;
+        message += `*Отзывов пока нет*\n`;
       }
 
-      await this.bot.sendMessage(chatId, ratingText, {
+      await this.bot.sendMessage(chatId, message, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [[{ text: '📭 Новые заказы', callback_data: 'new_orders' }]],
@@ -774,7 +790,7 @@ ${ratingText}
       });
     } catch (error) {
       console.error('Error showing nanny rating:', error);
-      await this.bot.sendMessage(chatId, '❌ Ошибка при загрузке рейтинга');
+      await this.bot.sendMessage(chatId, '📊 Ваш рейтинг загружается...');
     }
   }
 
@@ -951,6 +967,17 @@ ${nannyName} сообщила об окончании визита.
     } catch (error) {
       console.error('Error saving review comment:', error);
       await this.bot.sendMessage(chatId, '❌ Ошибка при сохранении отзыва');
+    }
+  }
+
+  // Добавьте в класс BotService
+  private getReviewWord(count: number): string {
+    if (count % 10 === 1 && count % 100 !== 11) {
+      return 'отзыв';
+    } else if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) {
+      return 'отзыва';
+    } else {
+      return 'отзывов';
     }
   }
 
@@ -1294,13 +1321,11 @@ ${nannyName} сообщила об окончании визита.
               await this.usersService.clearTempOrderData(chatId);
 
               // Обновляем сообщение
-              await this.bot.editMessageText(
+              // Временно закомментируйте editMessageText и используйте:
+              await this.bot.sendMessage(
+                chatId,
                 '✅ Заказ создан и отправлен няням! Ожидайте откликов.',
-                {
-                  chat_id: chatId,
-                  message_id: query.message?.message_id,
-                  reply_markup: { inline_keyboard: [] },
-                },
+                { reply_markup: { remove_keyboard: true } },
               );
 
               // Запускаем таймер на 1 час для уведомления об отсутствии откликов
@@ -1384,7 +1409,81 @@ ${nannyName} сообщила об окончании визита.
         // 🔹 Родитель
         if (user.role === Role.PARENT) {
           const fsmParent = await this.usersService.getParentFSM(chatId);
-          // 🔹 Обработка select_child_ отдельно (перед switch)
+
+          // 🔹 ОБРАБОТКА ОСТАВЛЕНИЯ ОТЗЫВА
+          if (query.data.startsWith('leave_review_')) {
+            const parts = query.data.split('_');
+            const orderId = parseInt(parts[2]);
+            const nannyId = parseInt(parts[3]);
+
+            // Сохраняем состояние - ожидаем отзыв от пользователя
+            await this.usersService.setParentFSM(chatId, `awaiting_review_${orderId}_${nannyId}`);
+
+            const reviewRequest = `
+📝 Пожалуйста, оставьте отзыв о работе няни.
+
+Оцените от 1 до 5 звезд и напишите комментарий.
+
+Например:
+"5 ⭐️
+Отличная няня! Ребенок был доволен."
+    `.trim();
+
+            const ratingKeyboard = {
+              inline_keyboard: [
+                [
+                  { text: '1 ⭐', callback_data: `set_rating_1_${orderId}_${nannyId}` },
+                  { text: '2 ⭐', callback_data: `set_rating_2_${orderId}_${nannyId}` },
+                  { text: '3 ⭐', callback_data: `set_rating_3_${orderId}_${nannyId}` },
+                  { text: '4 ⭐', callback_data: `set_rating_4_${orderId}_${nannyId}` },
+                  { text: '5 ⭐', callback_data: `set_rating_5_${orderId}_${nannyId}` },
+                ],
+              ],
+            };
+
+            await this.bot.sendMessage(chatId, reviewRequest, {
+              parse_mode: 'Markdown',
+              reply_markup: ratingKeyboard,
+            });
+
+            await this.bot.answerCallbackQuery(query.id);
+            return;
+          }
+
+          // 🔹 ОБРАБОТКА ВЫБОРА РЕЙТИНГА
+          if (query.data.startsWith('set_rating_')) {
+            const parts = query.data.split('_');
+            const rating = parseInt(parts[2]);
+            const orderId = parseInt(parts[3]);
+            const nannyId = parseInt(parts[4]);
+
+            console.log('⭐ set_rating callback DETAILS:', {
+              queryData: query.data,
+              parts: parts,
+              rating,
+              orderId,
+              nannyId,
+              chatId,
+            });
+
+            // 🔹 ДОБАВЬТЕ ПРОВЕРКУ
+            if (isNaN(rating) || isNaN(orderId) || isNaN(nannyId)) {
+              console.error('❌ INVALID RATING PARAMETERS:', { parts, rating, orderId, nannyId });
+              await this.bot.sendMessage(chatId, '❌ Ошибка: неверные данные рейтинга.');
+              await this.bot.answerCallbackQuery(query.id);
+              return;
+            }
+
+            // Сохраняем рейтинг и ожидаем текстовый отзыв
+            await this.usersService.setParentFSM(
+              chatId,
+              `awaiting_review_text_${orderId}_${nannyId}_${rating}`,
+            );
+
+            await this.bot.sendMessage(chatId, '📝 Теперь напишите текстовый отзыв (комментарий):');
+            await this.bot.answerCallbackQuery(query.id);
+            return;
+          }
 
           // 🔹 ДОБАВЛЕНО: Обработка подтверждения заказа родителем
 
@@ -1395,9 +1494,8 @@ ${nannyName} сообщила об окончании визита.
 
             const order = await this.usersService.getOrderById(orderId);
             const nanny = await this.usersService.getById(nannyId);
-            const parent = await this.usersService.getById(user.id);
 
-            if (!order || !nanny || !parent) {
+            if (!order || !nanny) {
               await this.bot.sendMessage(chatId, '❌ Ошибка: данные не найдены.');
               await this.bot.answerCallbackQuery(query.id);
               return;
@@ -1406,10 +1504,10 @@ ${nannyName} сообщила об окончании визита.
             // Обновляем статус заказа
             await this.usersService.updateOrderStatus(orderId, OrderStatus.ACCEPTED);
 
-            // 🔹 ОТПРАВЛЯЕМ НЯНЕ ОДНО СООБЩЕНИЕ С НОМЕРОМ И КНОПКОЙ
+            // 🔹 ОТПРАВЛЯЕМ НЯНЕ УВЕДОМЛЕНИЕ О ПОДТВЕРЖДЕНИИ
             if (nanny.chatId) {
-              const parentPhone = parent.phone
-                ? `📞 Телефон родителя: ${parent.phone}`
+              const parentPhone = user.phone
+                ? `📞 Телефон родителя: ${user.phone}`
                 : '📞 Телефон не указан';
 
               const nannyNotification = `
@@ -1425,7 +1523,7 @@ ${parentPhone}
 
 Можете связаться для уточнения деталей.
 После окончания визита нажмите кнопку ниже:
-    `.trim();
+        `.trim();
 
               const completeKeyboard = {
                 inline_keyboard: [
@@ -1444,42 +1542,32 @@ ${parentPhone}
               });
             }
 
-            // 🔹 ОТПРАВЛЯЕМ РОДИТЕЛЮ ПРОФИЛЬ НЯНИ С РЕЙТИНГОМ
+            // 🔹 ОТПРАВЛЯЕМ РОДИТЕЛЮ ТОЛЬКО НОМЕР ТЕЛЕФОНА (НОВОЕ СООБЩЕНИЕ)
             const nannyPhone = nanny.phone
               ? `📞 Телефон няни: ${nanny.phone}`
               : '📞 Телефон няни не указан';
 
-            // 🔹 ФОРМИРУЕМ ТЕКСТ С РЕЙТИНГОМ
-            const ratingText = nanny.avgRating
-              ? `⭐ Рейтинг: ${nanny.avgRating.toFixed(1)}/5 (${nanny.totalReviews || 0} отзывов)`
-              : '⭐ Рейтинг: пока нет отзывов';
-
-            const parentNotification = `
+            const parentConfirmation = `
 ✅ Вы подтвердили заказ!
 
 ${nannyPhone}
-${ratingText}
 
-👩‍🍼 *Профиль няни:*
-*Имя:* ${nanny.profile?.name || 'Не указано'}
-*Опыт работы:* ${nanny.profile?.experience || 'Не указан'}
-*Род деятельности:* ${nanny.profile?.occupation || 'Не указан'}
-*Мед. карта:* ${nanny.profile?.hasMedCard ? '✅ Есть' : '❌ Нет'}
-*Ставка:* ${nanny.profile?.price ? nanny.profile.price + ' ₽/час' : 'Не указана'}
-  `.trim();
+Свяжитесь с няней для уточнения деталей.
+    `.trim();
 
-            await this.bot.sendMessage(chatId, parentNotification, {
-              parse_mode: 'Markdown',
-            });
+            await this.bot.sendMessage(chatId, parentConfirmation);
 
-            // Обновляем исходное сообщение (убираем кнопки)
-            await this.bot.editMessageText('✅ Заказ подтвержден!', {
-              chat_id: chatId,
-              message_id: query.message?.message_id,
-              reply_markup: { inline_keyboard: [] },
-            });
+            // 🔹 НЕ УДАЛЯЕМ ИСХОДНОЕ СООБЩЕНИЕ С ПРОФИЛЕМ НЯНИ
+            // Просто убираем кнопки, но оставляем сообщение
+            await this.bot.editMessageReplyMarkup(
+              { inline_keyboard: [] },
+              {
+                chat_id: chatId,
+                message_id: query.message?.message_id,
+              },
+            );
 
-            await this.bot.answerCallbackQuery(query.id);
+            await this.bot.answerCallbackQuery(query.id, { text: '✅ Заказ подтвержден!' });
             return;
           }
 
@@ -1529,6 +1617,8 @@ ${ratingText}
               orderData.child = `${child.name} (${child.age} лет)`;
               orderData.childId = child.id;
               await this.usersService.setTempOrderData(chatId, orderData);
+
+              // 🔹 ПЕРЕХОДИМ К ЗАДАЧАМ
               await this.usersService.setParentFSM(chatId, 'ORDER_ASK_TASKS');
               await this.bot.sendMessage(
                 chatId,
@@ -2032,8 +2122,220 @@ ${ratingText}
         if (user.role === Role.NANNY) {
           if (query.data.startsWith('accept_order_')) {
             const orderId = parseInt(query.data.replace('accept_order_', ''));
-            await this.acceptOrder(chatId, orderId, user.id);
-            await this.bot.answerCallbackQuery(query.id);
+
+            try {
+              // Принимаем заказ
+              const updatedOrder = await this.usersService.acceptOrder(orderId, user.id);
+              const order = await this.usersService.getOrderById(orderId);
+
+              if (!order || !order.parent) {
+                await this.bot.sendMessage(chatId, '❌ Ошибка: заказ не найден.');
+                await this.bot.answerCallbackQuery(query.id);
+                return;
+              }
+
+              // 🔹 ОТПРАВЛЯЕМ РОДИТЕЛЮ СТАТИСТИКУ НЯНИ СРАЗУ ПРИ ПРИНЯТИИ ЗАКАЗА
+              const nanny = await this.usersService.getById(user.id);
+
+              // 🔹 ДОБАВЛЯЕМ ПРОВЕРКУ НА NULL
+              if (!nanny) {
+                await this.bot.sendMessage(chatId, '❌ Ошибка: няня не найдена.');
+                await this.bot.answerCallbackQuery(query.id);
+                return;
+              }
+
+              const nannyStats = await this.usersService.getNannyStats(user.id);
+              const recentReviews = await this.usersService.getRecentNannyReviews(user.id, 2);
+
+              // 🔹 ФОРМИРУЕМ ТЕКСТ С РЕЙТИНГОМ И СТАТИСТИКОЙ
+              const ratingText = nanny.avgRating
+                ? `⭐ Рейтинг: ${nanny.avgRating.toFixed(1)}/5 (${nanny.totalReviews || 0} ${this.getReviewWord(nanny.totalReviews || 0)})`
+                : '⭐ Рейтинг: пока нет отзывов';
+
+              // 🔹 СТАТИСТИКА
+              const statsText = `
+📊 *Статистика няни:*
+✅ Завершено заказов: ${nannyStats.completedOrders}
+👨‍👩‍👧‍👦 Обслужено родителей: ${nannyStats.uniqueParents}
+🎯 Постоянных клиентов: ${nannyStats.loyalParents}
+⏱️ Опыт работы: ${nannyStats.totalHours} часов
+`.trim();
+
+              // 🔹 ПОСЛЕДНИЕ ОТЗЫВЫ
+              let reviewsText = '';
+              if (recentReviews.length > 0) {
+                reviewsText = `\n💬 *Последние отзывы:*\n`;
+                recentReviews.forEach((review, index) => {
+                  const stars = '⭐'.repeat(review.rating);
+                  const shortComment =
+                    review.comment && review.comment.length > 50
+                      ? review.comment.substring(0, 50) + '...'
+                      : review.comment;
+
+                  reviewsText += `${stars}\n`;
+                  if (shortComment) {
+                    reviewsText += `${shortComment}\n`;
+                  }
+                  reviewsText += `\n`;
+                });
+              }
+
+              const parentNotification = `
+🎉 Няня откликнулась на ваш заказ!
+
+${ratingText}
+${statsText}
+${reviewsText}
+
+👩‍🍼 *Профиль няни:*
+*Имя:* ${nanny.profile?.name || 'Не указано'}
+*Опыт работы:* ${nanny.profile?.experience || 'Не указан'}
+*Род деятельности:* ${nanny.profile?.occupation || 'Не указан'}
+*Мед. карта:* ${nanny.profile?.hasMedCard ? '✅ Есть' : '❌ Нет'}
+*Ставка:* ${nanny.profile?.price ? nanny.profile.price + ' ₽/час' : 'Не указана'}
+
+*Детали заказа:*
+👶 Ребенок: ${order.child}
+📅 Дата: ${order.date}
+⏰ Время: ${order.time}
+🏠 Адрес: ${order.address}
+        `.trim();
+
+              // 🔹 ОТПРАВЛЯЕМ РОДИТЕЛЮ СТАТИСТИКУ И ПРОФИЛЬ НЯНИ С ФОТО
+              if (nanny.profile?.avatar) {
+                // 🔹 ОТПРАВЛЯЕМ ФОТО С ПОДПИСЬЮ
+                await this.bot.sendPhoto(order.parent.chatId, nanny.profile.avatar, {
+                  caption: parentNotification,
+                  parse_mode: 'Markdown',
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        {
+                          text: '✅ Подтвердить заказ',
+                          callback_data: `parent_confirm_order_${orderId}_${user.id}`,
+                        },
+                        {
+                          text: '❌ Отклонить',
+                          callback_data: `parent_reject_order_${orderId}_${user.id}`,
+                        },
+                      ],
+                    ],
+                  },
+                });
+              } else {
+                // 🔹 ЕСЛИ ФОТО НЕТ - ОТПРАВЛЯЕМ ТОЛЬКО ТЕКСТ
+                await this.bot.sendMessage(order.parent.chatId, parentNotification, {
+                  parse_mode: 'Markdown',
+                  reply_markup: {
+                    inline_keyboard: [
+                      [
+                        {
+                          text: '✅ Подтвердить заказ',
+                          callback_data: `parent_confirm_order_${orderId}_${user.id}`,
+                        },
+                        {
+                          text: '❌ Отклонить',
+                          callback_data: `parent_reject_order_${orderId}_${user.id}`,
+                        },
+                      ],
+                    ],
+                  },
+                });
+              }
+
+              // 🔹 УВЕДОМЛЯЕМ НЯНЮ
+              await this.bot.sendMessage(
+                chatId,
+                '✅ Вы откликнулись на заказ! Родитель получил вашу анкету и скоро примет решение.',
+                {
+                  reply_markup: {
+                    inline_keyboard: [[{ text: '📭 Новые заказы', callback_data: 'new_orders' }]],
+                  },
+                },
+              );
+
+              await this.bot.answerCallbackQuery(query.id);
+            } catch (error: any) {
+              console.error('Error accepting order:', error);
+              await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+              await this.bot.answerCallbackQuery(query.id);
+            }
+            return;
+          }
+          // 🔹 ОБРАБОТКА ЗАВЕРШЕНИЯ ЗАКАЗА НЯНЕЙ
+          if (query.data.startsWith('complete_visit_')) {
+            const orderId = parseInt(query.data.replace('complete_visit_', ''));
+
+            try {
+              // Получаем данные заказа
+              const order = await this.usersService.getOrderById(orderId);
+              if (!order) {
+                await this.bot.sendMessage(chatId, '❌ Заказ не найден.');
+                await this.bot.answerCallbackQuery(query.id);
+                return;
+              }
+
+              // Обновляем статус заказа на "Завершен"
+              await this.usersService.updateOrderStatus(orderId, OrderStatus.COMPLETED);
+
+              // 🔹 УВЕДОМЛЯЕМ РОДИТЕЛЯ
+              const parent = await this.usersService.getById(order.parentId);
+              if (parent?.chatId) {
+                const completionMessage = `
+✅ Визит няни завершен!
+Пожалуйста, оставьте отзыв о работе няни.
+            `.trim();
+
+                const reviewKeyboard = {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: '⭐ Оставить отзыв',
+                        callback_data: `leave_review_${orderId}_${order.nannyId}`,
+                      },
+                    ],
+                  ],
+                };
+
+                await this.bot.sendMessage(parent.chatId, completionMessage, {
+                  parse_mode: 'Markdown',
+                  reply_markup: reviewKeyboard,
+                });
+
+                // 2. ЧЕРЕЗ 3 СЕКУНДЫ ОТПРАВЛЯЕМ ТАРИФЫ
+                setTimeout(async () => {
+                  const tariffsMessage = `
+💰 Выберите тип оплаты:
+
+
+                `.trim();
+
+                  await this.bot.sendMessage(parent.chatId, tariffsMessage, {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                      inline_keyboard: [
+                        [
+                          { text: '💳 Разовая оплата', callback_data: 'one_time_payment' },
+                          { text: '🔔 Подписка', callback_data: 'subscription' },
+                        ],
+                      ],
+                    },
+                  });
+                }, 3000);
+              }
+              // 🔹 ОБНОВЛЯЕМ СООБЩЕНИЕ У НЯНИ (убираем кнопку)
+              await this.bot.editMessageText('✅ Вы завершили визит! Ожидайте отзыв от родителя.', {
+                chat_id: chatId,
+                message_id: query.message?.message_id,
+                parse_mode: 'Markdown',
+              });
+
+              await this.bot.answerCallbackQuery(query.id, { text: '✅ Заказ завершен!' });
+            } catch (error: any) {
+              console.error('Error completing order:', error);
+              await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`);
+              await this.bot.answerCallbackQuery(query.id, { text: '❌ Ошибка завершения' });
+            }
             return;
           }
           switch (query.data) {
@@ -2409,6 +2711,59 @@ ${ratingText}
           }
 
           await this.usersService.setParentFSM(chatId, null);
+          return;
+        }
+
+        // 🔹 НОВЫЙ БЛОК - обработка текстового отзыва после выбора рейтинга
+
+        if (fsmParent?.startsWith('awaiting_review_text_') && text) {
+          console.log('📝 PROCESSING REVIEW TEXT STATE:', fsmParent);
+
+          const parts = fsmParent.split('_');
+          const orderId = parseInt(parts[3]);
+          const nannyId = parseInt(parts[4]);
+          const rating = parseInt(parts[5]);
+          const reviewText = text;
+
+          console.log('💾 ATTEMPTING TO SAVE REVIEW FROM TEXT:', {
+            orderId,
+            nannyId,
+            rating,
+            reviewText: reviewText.substring(0, 100),
+            parentId: user.id,
+          });
+
+          // 🔹 ДОБАВЬТЕ ПРОВЕРКУ НА NaN
+          if (isNaN(rating) || isNaN(orderId) || isNaN(nannyId)) {
+            console.error('❌ INVALID PARAMETERS:', { orderId, nannyId, rating });
+            await this.bot.sendMessage(
+              chatId,
+              '❌ Ошибка: неверные данные отзыва. Попробуйте еще раз.',
+            );
+            await this.usersService.setParentFSM(chatId, null);
+            return;
+          }
+
+          try {
+            // Сохраняем отзыв в базе
+            const savedReview = await this.usersService.createReview({
+              orderId,
+              nannyId,
+              parentId: user.id,
+              rating,
+              comment: reviewText,
+            });
+
+            console.log('✅ REVIEW SAVED SUCCESSFULLY:', savedReview);
+
+            // Сбрасываем состояние
+            await this.usersService.setParentFSM(chatId, null);
+
+            await this.bot.sendMessage(chatId, '✅ Спасибо за ваш отзыв!');
+          } catch (error: any) {
+            console.error('❌ ERROR SAVING REVIEW:', error);
+            await this.bot.sendMessage(chatId, `❌ Ошибка при сохранении отзыва: ${error.message}`);
+          }
           return;
         }
 

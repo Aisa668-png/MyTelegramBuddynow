@@ -20,20 +20,25 @@ export class UsersService {
       include: { profile: true },
     });
     if (existing) {
-      // Если роль уже установлена и отличается, не перезаписываем её здесь
-      // (смена роли должна происходить через отдельный защищённый сценарий)
       return existing;
     }
     const user = await this.prisma.user.create({
       data: { chatId, username, role },
-      include: { profile: true },
     });
 
     // Создаём профиль только для няни, если его нет
-    if (role === Role.NANNY && !user.profile) {
-      await this.prisma.profile.create({
-        data: { userId: user.id, status: ProfileStatus.NEW },
-      });
+    if (role === Role.NANNY) {
+      try {
+        await this.prisma.profile.create({
+          data: {
+            userId: user.id,
+            status: ProfileStatus.NEW,
+          },
+        });
+        console.log(`✅ Профиль создан для няни: ${user.id}`);
+      } catch (error) {
+        console.error('❌ Ошибка создания профиля:', error);
+      }
     }
 
     return this.getByChatId(chatId);
@@ -297,6 +302,7 @@ export class UsersService {
           child: orderData.child || '',
           tasks: orderData.tasks || '',
           address: orderData.address || '',
+          duration: orderData.duration || 3,
           status: 'PENDING',
         },
       });
@@ -741,6 +747,70 @@ export class UsersService {
   async getReviewByOrderId(orderId: number) {
     return this.prisma.review.findUnique({
       where: { orderId },
+    });
+  }
+
+  // В UsersService добавьте эти методы:
+
+  /**
+   * Получить статистику няни
+   */
+  async getNannyStats(nannyId: number) {
+    // Количество завершенных заказов
+    const completedOrders = await this.prisma.order.count({
+      where: {
+        nannyId: nannyId,
+        status: 'COMPLETED',
+      },
+    });
+
+    // Количество уникальных родителей
+    const uniqueParents = await this.prisma.order.groupBy({
+      by: ['parentId'],
+      where: {
+        nannyId: nannyId,
+        status: 'COMPLETED',
+      },
+      _count: {
+        parentId: true,
+      },
+    });
+
+    // Родители с более чем 1 заказом (лояльные клиенты)
+    const loyalParents = uniqueParents.filter((parent) => parent._count.parentId > 1).length;
+
+    // Общее количество часов (примерная логика - можно улучшить)
+    // Предполагаем, что каждый заказ длится 3 часа (можно изменить)
+    const totalHours = completedOrders * 3;
+
+    return {
+      completedOrders,
+      uniqueParents: uniqueParents.length,
+      loyalParents,
+      totalHours,
+    };
+  }
+
+  /**
+   * Получить последние отзывы няни (ограниченное количество)
+   */
+  async getRecentNannyReviews(nannyId: number, limit: number = 3) {
+    return this.prisma.review.findMany({
+      where: { nannyId },
+      include: {
+        parent: {
+          select: {
+            fullName: true,
+          },
+        },
+        order: {
+          select: {
+            date: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
     });
   }
 }

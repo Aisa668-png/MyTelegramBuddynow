@@ -149,6 +149,7 @@ model Order {
   nanny   User?    @relation("OrderToNanny", fields: [nannyId], references: [id])
   review  Review?
   reports Report[]
+  duration Int? // продолжительность в часах
 
   @@map("orders")
 }
