@@ -38,7 +38,7 @@ export class BotService implements OnModuleInit {
     { command: 'my_schedule', description: 'Мое расписание' },
     { command: 'my_orders', description: 'Мои заказы' },
     { command: 'my_rating', description: 'Мой рейтинг' },
-    { command: 'edit_profile', description: 'Редактировать профиль' },
+    { command: 'my_profile', description: 'Мой профиль' },
     { command: 'support', description: 'Связаться с поддержкой' },
     { command: 'faq', description: 'Вопросы и ответы' },
   ];
@@ -122,6 +122,8 @@ export class BotService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
   ) {}
+
+  // Обработчик одобрения анкеты
 
   private async handleParentMessage(
     chatId: string,
@@ -456,6 +458,172 @@ export class BotService implements OnModuleInit {
       await this.bot.sendMessage(chatId, '❌ Произошла ошибка при загрузке профиля');
     }
   }
+
+  /**
+   * 👤 Показывает профиль няни
+   */
+  private async showNannyProfile(chatId: string, user: any): Promise<void> {
+    try {
+      // Убеждаемся что профиль есть
+      await this.usersService.ensureProfileForNanny(user.id);
+      const userWithProfile = await this.usersService.getByChatId(chatId);
+
+      if (!userWithProfile?.profile) {
+        await this.bot.sendMessage(chatId, '❌ Профиль няни не найден');
+        return;
+      }
+
+      const profile = userWithProfile.profile;
+
+      // Формируем сообщение с профилем
+      const profileMessage = this.formatNannyProfile(profile, user);
+
+      // Отправляем сообщение с кнопками
+      await this.bot.sendMessage(chatId, profileMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '✏️ Редактировать профиль', callback_data: 'edit_nanny_profile' }],
+          ],
+        },
+        parse_mode: 'HTML',
+      });
+    } catch (error) {
+      console.error('Error showing nanny profile:', error);
+      await this.bot.sendMessage(chatId, '❌ Ошибка при загрузке профиля');
+    }
+  }
+
+  /**
+   * 📋 Форматирует профиль няни в красивое сообщение
+   */
+  private formatNannyProfile(profile: any, user: any): string {
+    const name = profile.name || 'Не указано';
+    const experience = profile.experience || 'Не указан';
+    const skills = profile.skills?.length > 0 ? profile.skills.join(', ') : 'Не указаны';
+    const price = profile.price ? `${profile.price} руб/час` : 'Не указана';
+    const area = profile.area || 'Не указан';
+    const occupation = profile.occupation || 'Не указана';
+    const dob = profile.dob ? new Date(profile.dob).toLocaleDateString('ru-RU') : 'Не указана';
+    const hasMedCard = profile.hasMedCard ? '✅ Есть' : '❌ Нет';
+    const status = this.getNannyStatusText(profile.status);
+
+    const phone = user.phone || 'Не указан';
+
+    return `
+👤 <b>Мой профиль няни</b>
+📝 <b>Имя:</b> ${name}
+📞 <b>Телефон:</b> ${phone}
+💼 <b>Род деятельности:</b> ${occupation}
+🏥 <b>Мед. карта:</b> ${hasMedCard}
+💰 <b>Ставка:</b> ${price}
+
+
+
+  `.trim();
+  }
+
+  /**
+   * 🔄 Получает текстовое представление статуса няни
+   */
+  private getNannyStatusText(status: ProfileStatus): string {
+    const statusMap = {
+      [ProfileStatus.NEW]: '🆕 Новая анкета',
+      [ProfileStatus.PENDING]: '⏳ На проверке',
+      [ProfileStatus.VERIFIED]: '✅ Одобрена',
+      [ProfileStatus.REJECTED]: '❌ Отклонена',
+    };
+    return statusMap[status] || 'Неизвестно';
+  }
+
+  /**
+   * ✏️ Обработчик редактирования профиля няни
+   */
+  /**
+   * ✏️ Обработчик редактирования профиля няни
+   */
+  /**
+   * ✏️ Обработчик редактирования профиля няни
+   */
+  private async handleEditNannyProfile(query: CallbackQuery): Promise<void> {
+    try {
+      // ✅ ДОБАВЬТЕ ПРОВЕРКУ
+      if (!query.message) {
+        console.error('Query message is undefined');
+        return;
+      }
+
+      const chatId = query.message.chat.id.toString();
+      const user = await this.usersService.getByChatId(chatId);
+
+      if (!user || user.role !== Role.NANNY) {
+        await this.bot.sendMessage(chatId, '❌ Доступ запрещен');
+        return;
+      }
+
+      // Показываем меню редактирования
+      await this.bot.sendMessage(chatId, '📝 Что вы хотите изменить в профиле?', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '👤 Имя', callback_data: 'edit_nanny_name' }],
+            [{ text: '💼 Опыт работы', callback_data: 'edit_nanny_experience' }],
+
+            [{ text: '💰 Ставка', callback_data: 'edit_nanny_price' }],
+
+            [{ text: '📅 Дата рождения', callback_data: 'edit_nanny_dob' }],
+            [{ text: '🏥 Мед. карта', callback_data: 'edit_nanny_medcard' }],
+          ],
+        },
+      });
+
+      // ✅ ДОБАВЬТЕ ПРОВЕРКУ ПЕРЕД УДАЛЕНИЕМ
+      if ('message_id' in query.message) {
+        await this.bot.deleteMessage(chatId, query.message.message_id);
+      }
+    } catch (error) {
+      console.error('Error handling edit nanny profile:', error);
+    }
+  }
+
+  /**
+   * 📋 Форматирует карточку заказа для няни
+   */
+  private formatNannyOrderCard(order: any, type: 'waiting_confirmation' | 'in_progress'): string {
+    const parentName = order.parent?.fullName || 'Не указано';
+
+    const statusConfig = {
+      waiting_confirmation: {
+        icon: '⏳',
+        status: 'Ожидает подтверждения родителя',
+        action: '📞 Родитель рассматривает вашу кандидатуру',
+      },
+      in_progress: {
+        icon: '✅',
+        status: 'Подтвержден, ожидает выполнения',
+        action: '⚡ Заказ активен, готовьтесь к визиту',
+      },
+    };
+
+    const config = statusConfig[type];
+
+    return `
+${config.icon} <b>Заказ #${order.id}</b>
+${config.status}
+
+👤 <b>Родитель:</b> ${parentName}
+📅 <b>Дата:</b> ${order.date}
+⏰ <b>Время:</b> ${order.time}
+⏱️ <b>Длительность:</b> ${order.duration || 3} ч
+👶 <b>Ребенок:</b> ${order.child}
+📍 <b>Адрес:</b> ${order.address}
+${order.tasks ? `📝 <b>Задачи:</b> ${order.tasks.substring(0, 50)}${order.tasks.length > 50 ? '...' : ''}` : ''}
+
+${config.action}
+  `.trim();
+  }
+
+  /**
+   * 📊 Обработчик статистики няни
+   */
 
   // 🔹 Вспомогательный метод для форматирования телефона
   private formatPhone(phone: string): string {
@@ -797,45 +965,105 @@ ${ratingText}
   // 🔹 ПОКАЗАТЬ АКТИВНЫЕ ЗАКАЗЫ НЯНИ С КНОПКОЙ ЗАВЕРШЕНИЯ
   private async showNannyActiveOrders(chatId: string, nannyId: number) {
     try {
+      // Получаем активные заказы (ACCEPTED + IN_PROGRESS)
       const activeOrders = await this.usersService.getNannyActiveOrders(nannyId);
 
+      // Разделяем заказы по статусам
+      const waitingConfirmation = activeOrders.filter((order) => order.status === 'ACCEPTED');
+      const inProgressOrders = activeOrders.filter((order) => order.status === 'IN_PROGRESS');
+
       if (activeOrders.length === 0) {
-        await this.bot.sendMessage(chatId, '📋 У вас нет активных заказов.', {
+        await this.bot.sendMessage(chatId, '🟡 У вас пока нет активных заказов.', {
+          parse_mode: 'HTML',
           reply_markup: {
-            inline_keyboard: [[{ text: '📭 Новые заказы', callback_data: 'new_orders' }]],
+            inline_keyboard: [],
           },
         });
         return;
       }
 
-      for (const order of activeOrders) {
-        const orderText = `
-✅ *Ваш активный заказ*
+      // 🔹 Показываем общую статистику
+      /* let summaryMessage = '🟡 <b>Незавершенные заказы</b>\n\n';
 
-📅 Дата: ${order.date}
-⏰ Время: ${order.time}
-👶 Ребенок: ${order.child}
-🏠 Адрес: ${order.address}
-👤 Родитель: ${order.parent.fullName || 'Не указано'}
+      if (waitingConfirmation.length > 0) {
+        summaryMessage += `⏳ <b>Ожидают подтверждения родителя:</b> ${waitingConfirmation.length}\n`;
+      }
+      if (inProgressOrders.length > 0) {
+        summaryMessage += `✅ <b>Активные заказы:</b> ${inProgressOrders.length}\n`;
+      }*/
 
-*Статус:* ${order.status === 'ACCEPTED' ? '✅ Подтвержден' : '🟡 В процессе'}
-      `.trim();
+      /*summaryMessage += `\n<i>Ниже показаны все ваши текущие заказы</i>`;
 
-        const keyboard = {
+      await this.bot.sendMessage(chatId, summaryMessage, {
+        parse_mode: 'HTML',
+        reply_markup: {
           inline_keyboard: [
-            [
-              {
-                text: '✅ Завершить визит',
-                callback_data: `complete_visit_${order.id}`,
-              },
-            ],
+            [{ text: '📦 Новые заказы', callback_data: 'new_orders' }],
+            [{ text: '📋 Назад', callback_data: 'nanny_orders_back' }],
           ],
-        };
+        },
+      });*/
 
-        await this.bot.sendMessage(chatId, orderText, {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard,
-        });
+      // 🔹 Показываем заказы ожидающие подтверждения
+      if (waitingConfirmation.length > 0) {
+        for (const order of waitingConfirmation) {
+          const orderText = `
+⏳ <b>Заказ #${order.id}</b>
+<b>Ожидает подтверждения родителя</b>
+
+👤 <b>Родитель:</b> ${order.parent?.fullName || 'Не указано'}
+📅 <b>Дата:</b> ${order.date}
+⏰ <b>Время:</b> ${order.time}
+⏱️ <b>Длительность:</b> ${order.duration || 3} ч
+👶 <b>Ребенок:</b> ${order.child}
+📍 <b>Адрес:</b> ${order.address}
+${order.tasks ? `📝 <b>Задачи:</b> ${order.tasks.substring(0, 50)}${order.tasks.length > 50 ? '...' : ''}` : ''}
+
+📞 <i>Родитель рассматривает вашу кандидатуру. Обычно ответ приходит в течение 1-2 часов.</i>
+        `.trim();
+
+          await this.bot.sendMessage(chatId, orderText, {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [],
+            },
+          });
+        }
+      }
+
+      // 🔹 Показываем активные заказы (подтвержденные)
+      if (inProgressOrders.length > 0) {
+        for (const order of inProgressOrders) {
+          const orderText = `
+✅ <b>Заказ #${order.id}</b>
+<b>Подтвержден, ожидает выполнения</b>
+
+👤 <b>Родитель:</b> ${order.parent?.fullName || 'Не указано'}
+📅 <b>Дата:</b> ${order.date}
+⏰ <b>Время:</b> ${order.time}
+⏱️ <b>Длительность:</b> ${order.duration || 3} ч
+👶 <b>Ребенок:</b> ${order.child}
+📍 <b>Адрес:</b> ${order.address}
+${order.tasks ? `📝 <b>Задачи:</b> ${order.tasks.substring(0, 100)}${order.tasks.length > 100 ? '...' : ''}` : ''}
+
+⚡ <i>Заказ активен! Готовьтесь к визиту.</i>
+        `.trim();
+
+          await this.bot.sendMessage(chatId, orderText, {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '✅ Завершить заказ',
+                    callback_data: `complete_visit_${order.id}`,
+                  },
+                ],
+                [{ text: '📞 Поддержка', callback_data: 'contact_support' }],
+              ],
+            },
+          });
+        }
       }
     } catch (error) {
       console.error('Error showing active orders:', error);
@@ -892,6 +1120,36 @@ ${nannyName} сообщила об окончании визита.
     } catch (error) {
       console.error('Error in complete order process:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 📋 Показывает меню заказов няни с двумя кнопками
+   */
+  private async showNannyOrdersMenu(chatId: string): Promise<void> {
+    try {
+      await this.bot.sendMessage(chatId, '📋 <b>Мои заказы</b>', {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: `🟡 Незавершенные`,
+                callback_data: 'nanny_orders_active',
+              },
+            ],
+            [
+              {
+                text: `✅ История заказов`,
+                callback_data: 'nanny_orders_history',
+              },
+            ],
+          ],
+        },
+      });
+    } catch (error) {
+      console.error('Error showing nanny orders menu:', error);
+      await this.bot.sendMessage(chatId, '❌ Ошибка при загрузке заказов');
     }
   }
 
@@ -981,6 +1239,117 @@ ${nannyName} сообщила об окончании визита.
     }
   }
 
+  /**
+   * 📅 Показывает расписание няни - ПОДТВЕРЖДЕННЫЕ будущие заказы
+   */
+  private async showNannySchedule(chatId: string, nannyId: number): Promise<void> {
+    try {
+      // Используем существующий метод UsersService вместо прямого prisma
+      const activeOrders = await this.usersService.getNannyActiveOrders(nannyId);
+
+      // Фильтруем только подтвержденные заказы (IN_PROGRESS) и будущие даты
+      const today = new Date().toISOString().split('T')[0];
+      const confirmedOrders = activeOrders.filter(
+        (order) => order.status === 'IN_PROGRESS' && order.date >= today,
+      );
+
+      if (confirmedOrders.length === 0) {
+        await this.bot.sendMessage(
+          chatId,
+          '📅 <b>Мое расписание</b>\n\nНа ближайшее время у вас нет запланированных заказов.',
+          {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [],
+            },
+          },
+        );
+        return;
+      }
+
+      // Группируем заказы по датам
+      const ordersByDate = this.groupOrdersByDate(confirmedOrders);
+
+      let message = '📅 <b>Мое расписание</b>\n\n';
+
+      for (const [date, orders] of Object.entries(ordersByDate)) {
+        const formattedDate = this.formatScheduleDate(date);
+        message += `📌 <b>${formattedDate}</b>\n\n`;
+
+        for (const order of orders) {
+          message += this.formatScheduleOrder(order);
+          message += '\n' + '─'.repeat(30) + '\n\n';
+        }
+      }
+
+      message += '<i>Это ваши подтвержденные заказы на ближайшее время</i>';
+
+      await this.bot.sendMessage(chatId, message, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [],
+        },
+      });
+    } catch (error) {
+      console.error('Error showing nanny schedule:', error);
+      await this.bot.sendMessage(chatId, '❌ Ошибка при загрузке расписания');
+    }
+  }
+
+  /**
+   * ⏰ Форматирует заказ для расписания
+   */
+  private formatScheduleOrder(order: any): string {
+    const parentName = order.parent?.fullName || 'Не указано';
+
+    return `
+✅ <b>${order.time}</b>
+📅 <b>Дата:</b> ${order.date}
+👤 <b>Родитель:</b> ${parentName}
+👶 <b>Ребенок:</b> ${order.child}
+📍 <b>Адрес:</b> ${order.address}
+⏱️ <b>Длительность:</b> ${order.duration || 3} ч
+${order.tasks ? `📝 <b>Задачи:</b> ${order.tasks.substring(0, 40)}${order.tasks.length > 40 ? '...' : ''}` : ''}
+  `.trim();
+  }
+  /**
+   * 📊 Группирует заказы по датам
+   */
+  private groupOrdersByDate(orders: any[]): { [date: string]: any[] } {
+    return orders.reduce(
+      (groups, order) => {
+        const date = order.date;
+        if (!groups[date]) {
+          groups[date] = [];
+        }
+        groups[date].push(order);
+        return groups;
+      },
+      {} as { [date: string]: any[] },
+    );
+  }
+
+  /**
+   * 📅 Форматирует дату для расписания
+   */
+  private formatScheduleDate(dateString: string): string {
+    const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Сегодня';
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return 'Завтра';
+    } else {
+      return date.toLocaleDateString('ru-RU', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      });
+    }
+  }
   onModuleInit(): void {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     if (!token) throw new Error('❌ TELEGRAM_BOT_TOKEN не найден в .env');
@@ -1233,7 +1602,7 @@ ${nannyName} сообщила об окончании визита.
 
               if (profile.status === ProfileStatus.VERIFIED) {
                 // Устанавливаем меню слева от скрепки
-                console.log(`🚨 УСТАНАВЛИВАЮ МЕНЮ В ${new Error().stack?.split('\n')[2]}`);
+
                 await this.bot.setMyCommands(this.nannyCommands, {
                   scope: { type: 'chat', chat_id: Number(chatId) },
                 });
@@ -1502,7 +1871,7 @@ ${nannyName} сообщила об окончании визита.
             }
 
             // Обновляем статус заказа
-            await this.usersService.updateOrderStatus(orderId, OrderStatus.ACCEPTED);
+            await this.usersService.updateOrderStatus(orderId, OrderStatus.IN_PROGRESS);
 
             // 🔹 ОТПРАВЛЯЕМ НЯНЕ УВЕДОМЛЕНИЕ О ПОДТВЕРЖДЕНИИ
             if (nanny.chatId) {
@@ -1702,6 +2071,10 @@ ${nannyPhone}
               await this.bot.answerCallbackQuery(query.id, { text: '❌ Ошибка завершения' });
             }
             return;
+          }
+
+          if (query.data === 'edit_nanny_profile') {
+            await this.handleEditNannyProfile(query);
           }
 
           switch (query.data) {
@@ -2343,12 +2716,24 @@ ${reviewsText}
               await this.showNewOrdersToNanny(chatId);
               break;
 
+            case 'my_schedule':
+              await this.showNannySchedule(chatId, user.id);
+              break;
+
             case 'refresh_orders':
               await this.showNewOrdersToNanny(chatId);
               break;
 
             case 'my_accepted_orders':
               await this.showNannyAcceptedOrders(chatId, user.id);
+              break;
+
+            case 'nanny_orders_active':
+              await this.showNannyActiveOrders(chatId, user.id);
+              break;
+
+            case 'nanny_orders_history':
+              await this.bot.sendMessage(chatId, '✅ Раздел "История заказов" в разработке');
               break;
 
             case 'medcard_yes':
@@ -2395,7 +2780,7 @@ ${reviewsText}
             case 'medcard_ready':
               await this.bot.sendMessage(
                 chatId,
-                '📍 Отлично! Вы можете оформить медкнижку бесплатно по ОМС...',
+                '📍 Отлично! Вы можете оформить медкнижку бесплатно по ОМС,обратившись к своему участковому терапевту.Либо обратитесь в медицинский центр Авиценна по номеру +79998887766',
                 {
                   reply_markup: {
                     inline_keyboard: [
@@ -2579,11 +2964,14 @@ ${reviewsText}
           return;
         }
 
+        // В обработчике message:
         if (text === '/my_profile') {
           if (user.role === Role.PARENT) {
-            await this.showParentProfile(chatId, user);
+            await this.showParentProfile(chatId, user); // ✅ для родителя
+          } else if (user.role === Role.NANNY) {
+            await this.showNannyProfile(chatId, user); // ✅ для няни
           } else {
-            await this.bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');
+            await this.bot.sendMessage(chatId, '❌ Команда не доступна');
           }
           return;
         }
@@ -2608,11 +2996,17 @@ ${reviewsText}
         }
 
         // 🔹 ДОБАВЛЕНО: Обработка команды Мои заказы
+        // ✅ ОДИН общий обработчик
         if (text === '/my_orders') {
           if (user.role === Role.PARENT) {
             await this.showMyOrdersMenu(chatId);
+          } else if (user.role === Role.NANNY) {
+            await this.showNannyOrdersMenu(chatId);
           } else {
-            await this.bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');
+            await this.bot.sendMessage(
+              chatId,
+              '❌ Эта команда доступна только для родителей и нянь',
+            );
           }
           return;
         }
@@ -2638,19 +3032,11 @@ ${reviewsText}
         }
 
         // 🔹 ДОБАВЛЕНО: Обработка команды Мои заказы для няни
-        if (text === '/my_orders') {
-          if (user.role === Role.NANNY) {
-            await this.showNannyAcceptedOrders(chatId, user.id);
-          } else {
-            await this.bot.sendMessage(chatId, '❌ Эта команда доступна только для нянь');
-          }
-          return;
-        }
 
         // 🔹 ДОБАВЛЕНО: Обработка команды Мое расписание для няни
         if (text === '/my_schedule') {
           if (user.role === Role.NANNY) {
-            await this.bot.sendMessage(chatId, '📅 Раздел "Мое расписание" в разработке');
+            await this.showNannySchedule(chatId, user.id);
           } else {
             await this.bot.sendMessage(chatId, '❌ Эта команда доступна только для нянь');
           }
@@ -2977,7 +3363,7 @@ ${reviewsText}
           await this.usersService.setNannyFSM(chatId, null);
           await this.bot.sendMessage(
             chatId,
-            '🎉 Ура, ваша анкета у нас! Мы уже отправили ее на проверку.Обычно мы справляемся в течении 24 часов.Как только все будет готово-мы сразу же вам позвоним.Осталось совсем немного!спасибо что выбрали наш сервис! ✅',
+            '🎉 Ура, ваша анкета у нас! Мы уже отправили ее на проверку.Обычно мы справляемся в течении 24 часов.Как только все будет готово-вам прийдет смс уведомление.Осталось совсем немного!спасибо что выбрали наш сервис! ✅',
             {
               reply_markup: {
                 inline_keyboard: [

@@ -764,6 +764,17 @@ export class UsersService {
       },
     });
 
+    // Сумма часов из всех завершенных заказов
+    const hoursResult = await this.prisma.order.aggregate({
+      where: {
+        nannyId: nannyId,
+        status: 'COMPLETED',
+      },
+      _sum: {
+        duration: true,
+      },
+    });
+
     // Количество уникальных родителей
     const uniqueParents = await this.prisma.order.groupBy({
       by: ['parentId'],
@@ -779,15 +790,14 @@ export class UsersService {
     // Родители с более чем 1 заказом (лояльные клиенты)
     const loyalParents = uniqueParents.filter((parent) => parent._count.parentId > 1).length;
 
-    // Общее количество часов (примерная логика - можно улучшить)
-    // Предполагаем, что каждый заказ длится 3 часа (можно изменить)
-    const totalHours = completedOrders * 3;
+    // Общее количество часов (используем реальную сумму duration)
+    const totalHours = hoursResult._sum.duration || completedOrders * 3;
 
     return {
       completedOrders,
       uniqueParents: uniqueParents.length,
       loyalParents,
-      totalHours,
+      totalHours: Math.round(totalHours),
     };
   }
 
@@ -812,5 +822,72 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
+  }
+  // В конец класса UsersService добавьте:
+
+  /**
+   * 🔄 Обновление статуса няни с уведомлением
+   */
+  async updateNannyStatusWithNotify(
+    userId: number,
+    status: ProfileStatus,
+    bot: any,
+  ): Promise<void> {
+    // 1. Обновляем статус в БД
+    await this.updateNannyStatus(userId, status);
+
+    // 2. Отправляем уведомление няне
+    await this.notifyNannyStatusChange(userId, bot);
+  }
+
+  /**
+   * 🔔 Уведомление няни об изменении статуса анкеты (приватный метод)
+   */
+  private async notifyNannyStatusChange(userId: number, bot: any): Promise<void> {
+    try {
+      const user = await this.getById(userId);
+      if (!user || !user.chatId || !bot) return;
+
+      const profile = user.profile;
+      if (!profile) return;
+
+      const name = profile.name || user.username || 'няня';
+
+      if (profile.status === ProfileStatus.VERIFIED) {
+        // ✅ Одобрение
+        await bot.sendMessage(
+          user.chatId,
+          `🎉 Поздравляем, ${name}! Ваша анкета одобрена!\n\n` +
+            `Теперь вы можете принимать заказы. Нажмите "Новые заказы" чтобы начать работу!`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: 'Новые заказы', callback_data: 'new_orders' }]],
+            },
+          },
+        );
+
+        // Устанавливаем флаг первого входа
+        await this.setFirstLoginAfterVerification(userId, true);
+      } else if (profile.status === ProfileStatus.REJECTED) {
+        // ❌ Отклонение
+        const reason = 'анкета не прошла модерацию';
+
+        await bot.sendMessage(
+          user.chatId,
+          `❌ К сожалению, ваша анкета не прошла модерацию.\n\n` +
+            `Причина: ${reason}\n\n` +
+            `Вы можете исправить анкету и отправить на повторную проверку.`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: 'Изменить анкету', callback_data: 'edit_profile' }]],
+            },
+          },
+        );
+      }
+
+      console.log(`📨 Уведомление отправлено няне ${userId} о статусе: ${profile.status}`);
+    } catch (error) {
+      console.error('❌ Ошибка отправки уведомления няне:', error);
+    }
   }
 }

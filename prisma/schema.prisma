@@ -81,6 +81,10 @@ model User {
   reviewsGiven    Review[] @relation("ParentReviews")
   reviewsReceived Review[] @relation("NannyReviews")
   reportsFiled    Report[] @relation("UserReports")
+
+   @@index([role])
+  @@index([isSuspended])
+  @@index([createdAt])
 }
 
 // Модель профиля (например, для няни)
@@ -103,6 +107,11 @@ model Profile {
   firstLoginAfterVerification Boolean       @default(false)
   createdAt                   DateTime      @default(now())
   updatedAt                   DateTime      @updatedAt
+
+    @@index([status])
+  @@index([area])
+  @@index([createdAt])
+
 }
 
 // Модель ребенка
@@ -119,6 +128,8 @@ model Child {
   // ✅ ДОБАВЬТЕ временные метки
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+   @@index([userId])
 }
 
 model Order {
@@ -150,6 +161,12 @@ model Order {
   review  Review?
   reports Report[]
   duration Int? // продолжительность в часах
+
+   @@index([parentId])
+  @@index([nannyId])
+  @@index([status])
+  @@index([date])
+  @@index([createdAt])
 
   @@map("orders")
 }
