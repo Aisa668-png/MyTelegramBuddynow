@@ -24,3 +24,26 @@ export interface CallbackData {
   nannyId?: number;
   parentId?: number;
 }
+export enum Role {
+  PARENT = 'parent',
+  NANNY = 'nanny',
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export interface User {
+  id: number;
+  chatId: string;
+  username: string;
+  role: Role;
+  phone?: string;
+  profile?: any;
+}
+
+// Добавьте другие необходимые типы

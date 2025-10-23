@@ -8,6 +8,13 @@ import { FsmService } from './services/fsm.service';
 import { ProfileService } from './services/profile.service';
 import { OrderService } from './services/order.service';
 import { RatingService } from './services/rating.service';
+import { CallbackService } from './services/callback.service';
+import { ParentCallbackHandler } from './services/callback-handlers/parent-callback.handler';
+import { NannyCallbackHandler } from './services/callback-handlers/nanny-callback.handler';
+import { CommandHandler } from './services/handlers/command.handler';
+import { ParentMessageHandler } from './services/handlers/parent-message.handler';
+import { NannyMessageHandler } from './services/handlers/nanny-message.handler';
+import { MessageHandlerService } from './services/message-handler.service';
 @Module({
   imports: [UsersModule],
   providers: [
@@ -19,6 +26,13 @@ import { RatingService } from './services/rating.service';
     ProfileService,
     OrderService,
     RatingService,
+    CallbackService,
+    ParentCallbackHandler,
+    NannyCallbackHandler,
+    CommandHandler,
+    ParentMessageHandler,
+    NannyMessageHandler,
+    MessageHandlerService,
   ],
   exports: [BotService],
 })

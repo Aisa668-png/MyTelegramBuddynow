@@ -52,11 +52,6 @@ ${order.tasks ? `📝 <b>Задачи:</b> ${order.tasks.substring(0, 40)}${orde
   `.trim();
   }
 
-  // 🔹 ДОБАВЬТЕ ЭТИ ДВА МЕТОДА:
-
-  /**
-   * 📦 Форматирует заказ для активных заказов
-   */
   formatActiveOrder(order: any, status: 'waiting' | 'confirmed'): string {
     const parentName = order.parent?.fullName || 'Не указано';
     const statusConfig = {
@@ -90,9 +85,6 @@ ${config.note}
     `.trim();
   }
 
-  /**
-   * 🎯 Создает клавиатуру для заказа
-   */
   createOrderKeyboard(orderId: number, status: 'waiting' | 'confirmed') {
     if (status === 'confirmed') {
       return {
