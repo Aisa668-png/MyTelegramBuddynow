@@ -17,3 +17,18 @@ export const nannyCommands = [
   { command: 'support', description: 'Связаться с поддержкой' },
   { command: 'faq', description: 'Вопросы и ответы' },
 ];
+
+export interface BotCommand {
+  command: string;
+  description: string;
+}
+
+export const adminCommands: BotCommand[] = [
+  { command: '/start', description: 'Перезапустить бота' },
+  { command: '/pending_profiles', description: '📋 Новые анкеты' },
+  { command: '/all_nannies', description: '👩‍🍼 Все анкеты' },
+  { command: '/new_orders', description: 'Новые заказы' },
+  { command: '/all_orders', description: 'Все заказы' },
+  { command: '/rejected_profiles', description: 'Отклоненые заказы нянь' },
+  { command: '/parent_profiles', description: 'Профили родителей' },
+];

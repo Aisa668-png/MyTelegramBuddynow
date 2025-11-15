@@ -533,6 +533,31 @@ export class UsersService {
       throw error;
     }
   }
+  async getOrdersByStatus(status: string) {
+    return this.prisma.order.findMany({
+      where: {
+        status: status as any, // Используем as any для обхода типизации
+      },
+      include: {
+        parent: { select: { fullName: true } },
+        nanny: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getOrdersByStatuses(statuses: string[]) {
+    return this.prisma.order.findMany({
+      where: {
+        status: { in: statuses as any },
+      },
+      include: {
+        parent: { select: { fullName: true } },
+        nanny: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 
   // 🔹 Обновить статус заказа
   async updateOrderStatus(orderId: number, status: OrderStatus): Promise<any> {
@@ -889,5 +914,107 @@ export class UsersService {
     } catch (error) {
       console.error('❌ Ошибка отправки уведомления няне:', error);
     }
+  }
+  async getPendingProfiles() {
+    return this.prisma.profile.findMany({
+      where: { status: ProfileStatus.PENDING },
+      include: { user: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async getProfilesByStatus(status: ProfileStatus) {
+    return this.prisma.profile.findMany({
+      where: { status },
+      include: { user: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async getUsersByRole(role: Role) {
+    return this.prisma.user.findMany({
+      where: { role },
+      include: {
+        ordersAsParent: true,
+        profile: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async getAllOrders() {
+    return this.prisma.order.findMany({
+      include: {
+        parent: { select: { fullName: true } },
+        nanny: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getPlatformStats() {
+    const [totalUsers, totalNannies, totalParents, pendingProfiles, totalOrders, completedOrders] =
+      await Promise.all([
+        this.prisma.user.count(),
+        this.prisma.user.count({ where: { role: Role.NANNY } }),
+        this.prisma.user.count({ where: { role: Role.PARENT } }),
+        this.prisma.profile.count({ where: { status: ProfileStatus.PENDING } }),
+        this.prisma.order.count(),
+        this.prisma.order.count({ where: { status: 'COMPLETED' } }),
+      ]);
+
+    return {
+      totalUsers,
+      totalNannies,
+      totalParents,
+      pendingModeration: pendingProfiles,
+      totalOrders,
+      completedOrders,
+      completionRate: totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : '0',
+    };
+  }
+
+  // 🔥 ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ ДЛЯ СТАТИСТИКИ (если нужны)
+  async getUserCount(): Promise<number> {
+    return this.prisma.user.count();
+  }
+
+  async getUserCountByRole(role: Role): Promise<number> {
+    return this.prisma.user.count({ where: { role } });
+  }
+
+  async getProfileCountByStatus(status: ProfileStatus): Promise<number> {
+    return this.prisma.profile.count({ where: { status } });
+  }
+
+  async getOrderCount(): Promise<number> {
+    return this.prisma.order.count();
+  }
+
+  async getAllNanniesWithPagination(skip: number, take: number) {
+    return this.prisma.user.findMany({
+      where: { role: Role.NANNY },
+      include: {
+        profile: true,
+        ordersAsNanny: {
+          include: {
+            parent: {
+              select: {
+                fullName: true,
+              },
+            },
+          },
+        },
+      },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getNanniesCount(): Promise<number> {
+    return this.prisma.user.count({
+      where: { role: Role.NANNY },
+    });
   }
 }

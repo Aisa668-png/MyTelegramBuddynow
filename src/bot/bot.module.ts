@@ -15,6 +15,8 @@ import { CommandHandler } from './services/handlers/command.handler';
 import { ParentMessageHandler } from './services/handlers/parent-message.handler';
 import { NannyMessageHandler } from './services/handlers/nanny-message.handler';
 import { MessageHandlerService } from './services/message-handler.service';
+import { AdminCommandHandler } from './services/handlers/admin-command.handler';
+import { AdminHandlerService } from './services/admin-handler.service';
 @Module({
   imports: [UsersModule],
   providers: [
@@ -33,7 +35,9 @@ import { MessageHandlerService } from './services/message-handler.service';
     ParentMessageHandler,
     NannyMessageHandler,
     MessageHandlerService,
+    AdminHandlerService,
+    AdminCommandHandler,
   ],
-  exports: [BotService],
+  exports: [BotService, AdminHandlerService, AdminCommandHandler],
 })
 export class BotModule {}

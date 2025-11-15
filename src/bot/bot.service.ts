@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import TelegramBot, { Message, CallbackQuery, SendMessageOptions } from 'node-telegram-bot-api';
 import { UsersService } from '../users/users.service';
 import { Role, ProfileStatus } from '../../generated/prisma';
-import { parentCommands, nannyCommands } from './config/commands.config';
+import { parentCommands, nannyCommands, adminCommands } from './config/commands.config';
 import { parentFsmSteps, orderCreationSteps } from './config/fsm.config';
 import { BOT_CONSTANTS } from './config/constants';
 import { FsmStep, OrderCreationStep, BotCommand } from './types/index';
@@ -17,10 +17,13 @@ import { ProfileService } from './services/profile.service';
 import { CallbackService } from './services/callback.service';
 import { MessageHandlerService } from './services/message-handler.service';
 import { CommandHandler } from './services/handlers/command.handler';
+import { AdminHandlerService } from './services/admin-handler.service';
+import { AdminCommandHandler } from './services/handlers/admin-command.handler';
 
 @Injectable()
 export class BotService implements OnModuleInit {
   private bot!: TelegramBot;
+  private adminCommands: BotCommand[] = adminCommands;
 
   private parentCommands: BotCommand[] = parentCommands;
   private nannyCommands: BotCommand[] = nannyCommands;
@@ -41,6 +44,8 @@ export class BotService implements OnModuleInit {
     private readonly callbackService: CallbackService,
     private readonly ratingService: RatingService,
     private readonly messageHandlerService: MessageHandlerService,
+    private readonly adminHandler: AdminHandlerService,
+    private readonly adminCommandHandler: AdminCommandHandler,
     private readonly CommandHandler: CommandHandler,
   ) {}
 
@@ -94,12 +99,15 @@ export class BotService implements OnModuleInit {
                 /* await this.bot.setMyCommands(parentCommands, {
                   scope: { type: 'chat', chat_id: Number(chatId) },
                 });*/
-                await this.fsmService.handleParentMessage(
+                /*await this.fsmService.handleParentMessage(
                   this.bot,
                   chatId,
                   '',
                   this.parentFsmSteps,
                   false,
+                );*/ await this.bot.sendMessage(
+                  chatId,
+                  'Продолжим регистрацию. Введите необходимые данные:',
                 );
                 return;
               } else {
@@ -124,19 +132,11 @@ export class BotService implements OnModuleInit {
               }
             }
 
-            if (user.role === Role.ADMIN) {
-              await this.bot.sendMessage(chatId, `С возвращением, админ 👑`, {
-                reply_markup: {
-                  inline_keyboard: [
-                    [
-                      {
-                        text: 'Просмотреть анкеты нянь',
-                        callback_data: 'admin_view_nannies',
-                      },
-                    ],
-                  ],
-                },
+            if (user?.role === Role.ADMIN) {
+              await this.bot.setMyCommands(this.adminCommands, {
+                scope: { type: 'chat', chat_id: Number(chatId) },
               });
+              await this.adminHandler.showAdminPanel(this.bot, chatId);
               return;
             }
 
@@ -369,6 +369,15 @@ export class BotService implements OnModuleInit {
           if (!user) {
             return;
           }
+          if (user.role === Role.ADMIN) {
+            const handled = await this.adminCommandHandler.handle(
+              this.bot,
+              msg,
+              chatId,
+              fullCommand,
+            );
+            if (handled) return;
+          }
 
           await this.CommandHandler.handle(this.bot, msg, chatId, user, fullCommand);
         } catch (error) {
@@ -430,6 +439,16 @@ export class BotService implements OnModuleInit {
         // 🔹 Няня
         if (user.role === Role.NANNY) {
           const handled = await this.callbackService.handleNannyCallbacks(
+            this.bot,
+            query,
+            chatId,
+            user,
+          );
+          if (handled) return;
+        }
+
+        if (user?.role === Role.ADMIN) {
+          const handled = await this.callbackService.handleAdminCallbacks(
             this.bot,
             query,
             chatId,
@@ -522,13 +541,16 @@ export class BotService implements OnModuleInit {
           }
 
           // Если FSM уже был — продолжаем текущий процесс
-          await this.fsmService.handleParentMessage(
+          /*await this.fsmService.handleParentMessage(
             this.bot,
             chatId,
             '',
             this.parentFsmSteps,
             false,
             msg.contact,
+          );*/ await this.bot.sendMessage(
+            chatId,
+            '✅ Номер телефона сохранен! Продолжим регистрацию.',
           );
           return;
         }
