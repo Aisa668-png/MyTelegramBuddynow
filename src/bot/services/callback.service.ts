@@ -476,7 +476,7 @@ ${
 
     if (orderData) {
       try {
-        const order = await this.usersService.createOrder(user.id.toString(), orderData);
+        const order = await this.orderService.createOrder(user.id.toString(), orderData);
 
         await this.orderService.notifyNanniesAboutNewOrder(bot, order.id);
 

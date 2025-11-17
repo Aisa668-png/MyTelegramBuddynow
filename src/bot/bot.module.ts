@@ -17,8 +17,9 @@ import { NannyMessageHandler } from './services/handlers/nanny-message.handler';
 import { MessageHandlerService } from './services/message-handler.service';
 import { AdminCommandHandler } from './services/handlers/admin-command.handler';
 import { AdminHandlerService } from './services/admin-handler.service';
+import { PrismaModule } from 'src/prisma/prisma.module';
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, PrismaModule],
   providers: [
     BotService,
     MessageService,

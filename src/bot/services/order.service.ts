@@ -2,12 +2,13 @@ import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
 import { UsersService } from '../../users/users.service';
 import { MessageService } from './message.service';
-
+import { PrismaService } from 'src/prisma/prisma.service';
 @Injectable()
 export class OrderService {
   constructor(
     private readonly usersService: UsersService,
     private readonly messageService: MessageService,
+    private readonly prismaService: PrismaService,
   ) {}
 
   async showNewOrdersToNanny(bot: TelegramBot, chatId: string): Promise<void> {
@@ -185,6 +186,53 @@ export class OrderService {
     } catch (error) {
       console.error('Error showing nanny schedule:', error);
       await bot.sendMessage(chatId, '❌ Ошибка при загрузке расписания');
+    }
+  }
+  async createOrder(parentId: string, orderData: any) {
+    try {
+      console.log('📦 CREATING ORDER - INPUT DATA:', {
+        parentId,
+        orderData,
+        duration: orderData.duration,
+        hasDuration: !!orderData.duration,
+        time: orderData.time,
+      });
+
+      // 🔥 ПРОВЕРКА: если duration не пришел, но есть time - рассчитываем
+      let finalDuration = orderData.duration;
+      if (!finalDuration && orderData.time) {
+        // Можно добавить расчет длительности здесь или передавать из FSM
+        console.log('⚠️ Duration not provided, using default 3 hours');
+        finalDuration = 3;
+      }
+
+      const order = await this.prismaService.order.create({
+        data: {
+          parentId: parseInt(parentId),
+          date: orderData.date || '',
+          time: orderData.time || '',
+          child: orderData.child || '',
+          tasks: orderData.tasks || '',
+          address: orderData.address || '',
+          duration: finalDuration, // 🔥 ИСПОЛЬЗУЕМ ПРОВЕРЕННОЕ ЗНАЧЕНИЕ
+          status: 'PENDING',
+          parentChatId: orderData.parentChatId || null,
+        },
+      });
+
+      console.log('✅ ORDER CREATED IN DB:', {
+        orderId: order.id,
+        duration: order.duration, // 🔥 ДОЛЖЕН БЫТЬ НЕ 3
+        time: order.time,
+      });
+
+      // 🔥 УВЕДОМЛЯЕМ НЯНЬ О НОВОМ ЗАКАЗЕ
+      //await this.notifyNanniesAboutNewOrder(null, order.id);
+
+      return order;
+    } catch (error) {
+      console.error('❌ Error creating order:', error);
+      throw error;
     }
   }
 }

@@ -3,10 +3,14 @@ import TelegramBot from 'node-telegram-bot-api';
 import { UsersService } from '../../users/users.service';
 import { FsmStep } from '../types';
 import { Role } from '../../../generated/prisma';
+import { OrderService } from './order.service';
 
 @Injectable()
 export class FsmService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly orderService: OrderService,
+  ) {}
 
   /**
    * 👤 Обработчик FSM для родителя
@@ -169,9 +173,6 @@ export class FsmService {
     });
   }
 
-  /**
-   * 👶 Обработчик шагов добавления ребенка
-   */
   private async handleChildSteps(
     bot: TelegramBot,
     chatId: string,
@@ -239,9 +240,6 @@ export class FsmService {
     }
   }
 
-  /**
-   * 📋 Обработчик создания заказа
-   */
   async handleOrderCreation(
     bot: TelegramBot,
     chatId: string,
@@ -264,6 +262,13 @@ export class FsmService {
 
       case 'ORDER_ASK_TIME':
         orderData.time = text;
+        const calculatedHours = this.calculateDurationFromTime(text);
+        orderData.duration = calculatedHours;
+
+        console.log('🕒 Расчет длительности заказа:', {
+          input: text,
+          calculated: calculatedHours,
+        });
         await this.usersService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_SELECT_CHILD');
 
@@ -328,6 +333,100 @@ export class FsmService {
           },
         });
         break;
+      case 'ORDER_CONFIRM':
+        console.log('✅ CONFIRMING ORDER WITH DATA:', orderData);
+
+        try {
+          const createdOrder = await this.orderService.createOrder(user.id.toString(), {
+            ...orderData,
+            parentChatId: chatId,
+          });
+
+          console.log('📦 Order created successfully:', {
+            orderId: createdOrder.id,
+            duration: createdOrder.duration,
+            status: createdOrder.status,
+          });
+
+          // Очищаем FSM и временные данные
+          await this.usersService.setParentFSM(chatId, null);
+          await this.usersService.clearTempOrderData(chatId);
+
+          await bot.sendMessage(
+            chatId,
+            `✅ Заказ создан! Ожидайте подтверждения няни.\n\n` +
+              `📋 Детали заказа:\n` +
+              `• Дата: ${orderData.date}\n` +
+              `• Время: ${orderData.time}\n` +
+              `• Длительность: ${orderData.duration} ч.\n` +
+              `• Адрес: ${orderData.address}`,
+          );
+        } catch (error) {
+          console.error('❌ Error creating order:', error);
+          await bot.sendMessage(
+            chatId,
+            '❌ Произошла ошибка при создании заказа. Попробуйте еще раз.',
+          );
+        }
+        break;
+    }
+  }
+
+  private calculateDurationFromTime(timeInput: string): number {
+    try {
+      const cleanInput = timeInput.replace(/\s/g, '');
+      const timeParts = cleanInput.split('-').filter((part) => part.length > 0);
+
+      if (timeParts.length !== 2) return 3;
+
+      const startTime = this.parseTime(timeParts[0]);
+      const endTime = this.parseTime(timeParts[1]);
+
+      if (!startTime || !endTime) return 3;
+
+      let diffMs = endTime.getTime() - startTime.getTime();
+      if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
+
+      return Math.max(1, Math.round(diffMs / (1000 * 60 * 60)));
+    } catch (error) {
+      return 3;
+    }
+  }
+
+  private parseTime(timeStr: string): Date | null {
+    try {
+      const cleanTime = timeStr.replace(/[^0-9:]/g, '');
+
+      let hours, minutes;
+
+      if (cleanTime.includes(':')) {
+        [hours, minutes] = cleanTime.split(':').map(Number);
+      } else {
+        if (cleanTime.length <= 2) {
+          hours = Number(cleanTime);
+          minutes = 0;
+        } else {
+          hours = Number(cleanTime.slice(0, 2));
+          minutes = Number(cleanTime.slice(2));
+        }
+      }
+
+      if (
+        isNaN(hours) ||
+        hours < 0 ||
+        hours > 23 ||
+        isNaN(minutes) ||
+        minutes < 0 ||
+        minutes > 59
+      ) {
+        return null;
+      }
+
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    } catch (error) {
+      return null;
     }
   }
 }

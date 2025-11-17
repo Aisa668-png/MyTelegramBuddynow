@@ -51,6 +51,141 @@ export class ParentMessageHandler {
     return false;
   }
 
+  // 🔥 ДОБАВИТЬ ЭТИ МЕТОДЫ В КЛАСС:
+  private async handleAskTime(
+    bot: any,
+    msg: any,
+    chatId: string,
+    timeInput: string,
+  ): Promise<boolean> {
+    try {
+      // 🔥 РАСЧЕТ ДЛИТЕЛЬНОСТИ
+      const calculatedHours = this.calculateDurationFromTime(timeInput);
+
+      console.log('🕒 Расчет длительности:', {
+        input: timeInput,
+        calculated: calculatedHours,
+      });
+
+      // Сохраняем время и РАССЧИТАННУЮ длительность
+      await this.usersService.setTempOrderData(chatId, {
+        time: timeInput,
+        duration: calculatedHours,
+      });
+
+      // Показываем сообщение с подтверждением
+      const durationMessage = `⏱️ **Проверьте длительность**: ${calculatedHours} ч.\n\n✅ _Если всё верно - нажмите "Подтвердить"\n✏️ Или введите другое количество часов_`;
+
+      await bot.sendMessage(chatId, durationMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '✅ Подтвердить', callback_data: 'confirm_duration' }],
+            [{ text: '✏️ Изменить длительность', callback_data: 'edit_duration' }],
+          ],
+        },
+      });
+
+      await this.usersService.setParentFSM(chatId, 'ASK_DURATION');
+      return true;
+    } catch (error) {
+      console.error('Error handling ASK_TIME:', error);
+      await bot.sendMessage(chatId, '❌ Ошибка при обработке времени');
+      return true;
+    }
+  }
+
+  private async handleAskDuration(
+    bot: any,
+    msg: any,
+    chatId: string,
+    text: string,
+  ): Promise<boolean> {
+    try {
+      // 🔥 ОБРАБОТКА РУЧНОГО ВВОДА ДЛИТЕЛЬНОСТИ
+      if (text) {
+        const customDuration = parseInt(text);
+        if (isNaN(customDuration) || customDuration < 1) {
+          await bot.sendMessage(chatId, '❌ Введите корректное число часов (от 1):');
+          return true;
+        }
+
+        // Сохраняем РУЧНУЮ длительность
+        await this.usersService.setTempOrderData(chatId, {
+          duration: customDuration,
+        });
+      }
+
+      // Переходим к следующему шагу
+      await this.usersService.setParentFSM(chatId, 'ASK_CHILD');
+      await bot.sendMessage(chatId, '👶 Теперь расскажите о ребенке:');
+      return true;
+    } catch (error) {
+      console.error('Error handling ASK_DURATION:', error);
+      await bot.sendMessage(chatId, '❌ Ошибка при обработке длительности');
+      return true;
+    }
+  }
+
+  // 🔥 ДОБАВИТЬ МЕТОДЫ РАСЧЕТА В КОНЕЦ КЛАССА:
+  private calculateDurationFromTime(timeInput: string): number {
+    try {
+      const cleanInput = timeInput.replace(/\s/g, '');
+      const timeParts = cleanInput.split('-').filter((part) => part.length > 0);
+
+      if (timeParts.length !== 2) return 3;
+
+      const startTime = this.parseTime(timeParts[0]);
+      const endTime = this.parseTime(timeParts[1]);
+
+      if (!startTime || !endTime) return 3;
+
+      let diffMs = endTime.getTime() - startTime.getTime();
+      if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
+
+      return Math.max(1, Math.round(diffMs / (1000 * 60 * 60)));
+    } catch (error) {
+      return 3;
+    }
+  }
+
+  private parseTime(timeStr: string): Date | null {
+    try {
+      const cleanTime = timeStr.replace(/[^0-9:]/g, '');
+
+      let hours, minutes;
+
+      if (cleanTime.includes(':')) {
+        [hours, minutes] = cleanTime.split(':').map(Number);
+      } else {
+        if (cleanTime.length <= 2) {
+          hours = Number(cleanTime);
+          minutes = 0;
+        } else {
+          hours = Number(cleanTime.slice(0, 2));
+          minutes = Number(cleanTime.slice(2));
+        }
+      }
+
+      if (
+        isNaN(hours) ||
+        hours < 0 ||
+        hours > 23 ||
+        isNaN(minutes) ||
+        minutes < 0 ||
+        minutes > 59
+      ) {
+        return null;
+      }
+
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    } catch (error) {
+      return null;
+    }
+  }
+
   private async handleFsmStates(
     bot: any,
     msg: any,
@@ -59,8 +194,6 @@ export class ParentMessageHandler {
     fsmParent: string,
     text: string | undefined,
   ): Promise<boolean> {
-    console.log(`🔍 FSM состояние: ${fsmParent}, текст: "${text}"`);
-
     // 🔹 ПЕРЕДАЕМ ОБРАБОТКУ В FSM SERVICE
     if (text && fsmParent.startsWith('ORDER_')) {
       // Обработка создания заказа через FsmService
@@ -71,6 +204,11 @@ export class ParentMessageHandler {
     // 🔹 ОБРАБОТКА РЕГИСТРАЦИОННЫХ СОСТОЯНИЙ
     if (text) {
       switch (fsmParent) {
+        case 'ASK_TIME':
+          return await this.handleAskTime(bot, msg, chatId, text);
+
+        case 'ASK_DURATION':
+          return await this.handleAskDuration(bot, msg, chatId, text);
         case 'ASK_NAME':
           console.log(`✅ Обрабатываем ФИО родителя: ${text}`);
           await this.usersService.saveParentName(user.id, text);

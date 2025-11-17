@@ -44,7 +44,6 @@ export class UsersService {
     return this.getByChatId(chatId);
   }
 
-  // В классе UsersService добавьте:
   async getAllUsers() {
     return this.prisma.user.findMany({
       include: { profile: true },
@@ -77,7 +76,6 @@ export class UsersService {
     return user?.fsmStateNanny || null; // исправлено
   }
 
-  // users.service.ts
   async updateNannyProfile(
     userId: number,
     data: Partial<{
@@ -97,7 +95,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 Получить всех нянь (для админа) - ОБНОВИТЕ этот метод
   async getAllNannies() {
     return this.prisma.user.findMany({
       where: { role: Role.NANNY },
@@ -189,9 +186,7 @@ export class UsersService {
       data: { firstLoginAfterVerification: value },
     });
   }
-  // ...
 
-  // 🔹 Проверить, что у няни есть профиль, если нет — создать
   async ensureProfileForNanny(userId: number) {
     const user = await this.getById(userId);
 
@@ -225,9 +220,6 @@ export class UsersService {
     return new Date(year, month, day);
   }
 
-  /**
-   * Обновляет дату рождения няни
-   */
   async updateDob(userId: number, dateStr: string): Promise<boolean> {
     const dob = this.parseDateFromString(dateStr);
     if (!dob) return false;
@@ -269,46 +261,71 @@ export class UsersService {
       data,
     });
   }
-  // В UsersService замените эти методы:
 
-  private tempOrderStorage = new Map<string, any>(); // Добавьте это поле в класс
+  private tempOrderStorage = new Map<string, any>();
 
+  // В users.service.ts
+  // В users.service.ts
   async setTempOrderData(chatId: string, data: any): Promise<void> {
-    // Сохраняем данные в памяти
-    this.tempOrderStorage.set(chatId, data);
-    console.log('✅ Temp order data saved for chat:', chatId, data);
+    try {
+      console.log('💾 Saving temp order data to DB:', { chatId, data });
+
+      await this.prisma.tempOrderData.upsert({
+        where: { chatId },
+        update: {
+          data: data,
+          updatedAt: new Date(),
+        },
+        create: {
+          chatId,
+          data: data,
+        },
+      });
+
+      console.log('✅ Temp order data saved to DB successfully');
+    } catch (error) {
+      console.error('❌ Error saving temp order data to DB:', error);
+      // Fallback на память
+      this.tempOrderStorage.set(chatId, data);
+    }
   }
 
   async getTempOrderData(chatId: string): Promise<any> {
-    // Получаем данные из памяти
-    const data = this.tempOrderStorage.get(chatId) || {};
-    console.log('📋 Temp order data retrieved for chat:', chatId, data);
-    return data;
+    try {
+      const tempData = await this.prisma.tempOrderData.findUnique({
+        where: { chatId },
+      });
+
+      if (tempData) {
+        console.log('📋 Temp order data from DB:', { chatId, data: tempData.data });
+        return tempData.data;
+      }
+
+      console.log('📋 No temp order data in DB for:', chatId);
+
+      // Fallback: проверяем память
+      const memoryData = this.tempOrderStorage.get(chatId);
+      if (memoryData) {
+        console.log('📋 Temp order data from memory:', { chatId, memoryData });
+        return memoryData;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting temp order data from DB:', error);
+      return this.tempOrderStorage.get(chatId) || null;
+    }
   }
 
   async clearTempOrderData(chatId: string): Promise<void> {
-    // Очищаем данные
-    this.tempOrderStorage.delete(chatId);
-    console.log('🧹 Temp order data cleared for chat:', chatId);
-  }
-
-  async createOrder(parentId: string, orderData: any) {
     try {
-      return await this.prisma.order.create({
-        data: {
-          parentId: parseInt(parentId),
-          date: orderData.date || '',
-          time: orderData.time || '',
-          child: orderData.child || '',
-          tasks: orderData.tasks || '',
-          address: orderData.address || '',
-          duration: orderData.duration || 3,
-          status: 'PENDING',
-        },
+      await this.prisma.tempOrderData.delete({
+        where: { chatId },
       });
+      this.tempOrderStorage.delete(chatId);
+      console.log('🧹 Temp order data cleared for:', chatId);
     } catch (error) {
-      console.error('Error creating order:', error);
-      throw error;
+      console.error('❌ Error clearing temp order data:', error);
     }
   }
 
@@ -331,12 +348,11 @@ export class UsersService {
       return null;
     }
   }
-  // В UsersService
+
   async getCompletedOrders(parentId: string) {
     return true;
   }
 
-  // В UsersService измените на:
   async saveServiceFeedback(parentId: string, feedback: string) {
     console.log(`Отзыв о сервисе от пользователя ${parentId}: ${feedback}`);
     // TODO: Реализовать сохранение в БД
@@ -348,7 +364,7 @@ export class UsersService {
     // TODO: Реализовать сохранение в БД
     return true;
   }
-  // В UsersService добавьте:
+
   async getActiveOrders(parentId: string) {
     try {
       return await this.prisma.order.findMany({
@@ -382,13 +398,12 @@ export class UsersService {
       return [];
     }
   }
-  // В UsersService
+
   async saveUserQuestion(parentId: string, question: string) {
     console.log(`Вопрос от пользователя ${parentId}: ${question}`);
     // TODO: Реализовать сохранение в БД или отправку администратору
     return true;
   }
-  // В UsersService добавьте:
 
   // 🔹 Получить новые заказы для нянь
   async getNewOrdersForNannies() {
@@ -429,9 +444,6 @@ export class UsersService {
       return [];
     }
   }
-
-  // 🔹 Принять заказ няней
-  // users.service.ts - исправленный метод acceptOrder
 
   async acceptOrder(orderId: number, nannyId: number) {
     try {
@@ -572,9 +584,7 @@ export class UsersService {
     }
   }
 
-  // users.service.ts
-
-  // 🔹 СОЗДАНИЕ ОТЗЫВА (критически важно)
+  // 🔹 СОЗДАНИЕ ОТЗЫВА
   async createReview(data: {
     orderId: number;
     nannyId: number;
@@ -608,7 +618,7 @@ export class UsersService {
     return review;
   }
 
-  // 🔹 ОБНОВЛЕНИЕ РЕЙТИНГА НЯНИ (критически важно)
+  // 🔹 ОБНОВЛЕНИЕ РЕЙТИНГА НЯНИ
   async updateNannyRating(nannyId: number) {
     const stats = await this.prisma.review.aggregate({
       where: { nannyId },
@@ -625,7 +635,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ПОЛУЧЕНИЕ ОТЗЫВОВ НЯНИ (для меню "Мой рейтинг")
+  // 🔹 ПОЛУЧЕНИЕ ОТЗЫВОВ НЯНИ
   async getNannyReviews(nannyId: number) {
     return this.prisma.review.findMany({
       where: { nannyId },
@@ -647,7 +657,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ЗАВЕРШЕНИЕ ЗАКАЗА НЯНЕЙ (критически важно)
+  // 🔹 ЗАВЕРШЕНИЕ ЗАКАЗА НЯНЕЙ
   async completeOrder(orderId: number, nannyId: number) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -674,7 +684,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ПОЛУЧЕНИЕ АКТИВНЫХ ЗАКАЗОВ НЯНИ (с кнопкой завершения)
+  // 🔹 ПОЛУЧЕНИЕ АКТИВНЫХ ЗАКАЗОВ НЯНИ
   async getNannyActiveOrders(nannyId: number) {
     return this.prisma.order.findMany({
       where: {
@@ -695,7 +705,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ПРОВЕРКА ВОЗМОЖНОСТИ ЗАВЕРШЕНИЯ (защита от преждевременного завершения)
+  // 🔹 ПРОВЕРКА ВОЗМОЖНОСТИ ЗАВЕРШЕНИЯ
   async canCompleteOrder(
     orderId: number,
     nannyId: number,
@@ -723,8 +733,8 @@ export class UsersService {
     return { canComplete: true };
   }
 
-  // 🔹 СОЗДАНИЕ ЖАЛОБЫ (для системы контроля качества)
-  // users.service.ts - исправленный метод createReport
+  // 🔹 СОЗДАНИЕ ЖАЛОБЫ
+
   async createReport(data: {
     orderId: number;
     reporterId: number;
@@ -741,7 +751,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ПОЛУЧЕНИЕ ЗАВЕРШЕННЫХ ЗАКАЗОВ ДЛЯ ОЦЕНКИ (для родителя)
+  // 🔹 ПОЛУЧЕНИЕ ЗАВЕРШЕННЫХ ЗАКАЗОВ ДЛЯ ОЦЕНКИ
   async getCompletedOrdersForReview(parentId: number) {
     return this.prisma.order.findMany({
       where: {
@@ -760,7 +770,7 @@ export class UsersService {
     });
   }
 
-  // 🔹 ОБНОВЛЕНИЕ КОММЕНТАРИЯ ОТЗЫВА (после оценки)
+  // 🔹 ОБНОВЛЕНИЕ КОММЕНТАРИЯ ОТЗЫВА
   async updateReviewComment(reviewId: number, comment: string) {
     return this.prisma.review.update({
       where: { id: reviewId },
@@ -775,13 +785,7 @@ export class UsersService {
     });
   }
 
-  // В UsersService добавьте эти методы:
-
-  /**
-   * Получить статистику няни
-   */
   async getNannyStats(nannyId: number) {
-    // Количество завершенных заказов
     const completedOrders = await this.prisma.order.count({
       where: {
         nannyId: nannyId,
@@ -826,9 +830,6 @@ export class UsersService {
     };
   }
 
-  /**
-   * Получить последние отзывы няни (ограниченное количество)
-   */
   async getRecentNannyReviews(nannyId: number, limit: number = 3) {
     return this.prisma.review.findMany({
       where: { nannyId },
@@ -848,11 +849,7 @@ export class UsersService {
       take: limit,
     });
   }
-  // В конец класса UsersService добавьте:
 
-  /**
-   * 🔄 Обновление статуса няни с уведомлением
-   */
   async updateNannyStatusWithNotify(
     userId: number,
     status: ProfileStatus,
@@ -865,9 +862,6 @@ export class UsersService {
     await this.notifyNannyStatusChange(userId, bot);
   }
 
-  /**
-   * 🔔 Уведомление няни об изменении статуса анкеты (приватный метод)
-   */
   private async notifyNannyStatusChange(userId: number, bot: any): Promise<void> {
     try {
       const user = await this.getById(userId);
@@ -974,7 +968,6 @@ export class UsersService {
     };
   }
 
-  // 🔥 ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ ДЛЯ СТАТИСТИКИ (если нужны)
   async getUserCount(): Promise<number> {
     return this.prisma.user.count();
   }
