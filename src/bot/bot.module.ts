@@ -18,6 +18,7 @@ import { MessageHandlerService } from './services/message-handler.service';
 import { AdminCommandHandler } from './services/handlers/admin-command.handler';
 import { AdminHandlerService } from './services/admin-handler.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { ReviewService } from './services/review.service';
 @Module({
   imports: [UsersModule, PrismaModule],
   providers: [
@@ -38,7 +39,8 @@ import { PrismaModule } from 'src/prisma/prisma.module';
     MessageHandlerService,
     AdminHandlerService,
     AdminCommandHandler,
+    ReviewService,
   ],
-  exports: [BotService, AdminHandlerService, AdminCommandHandler],
+  exports: [BotService, AdminHandlerService, AdminCommandHandler, ReviewService],
 })
 export class BotModule {}

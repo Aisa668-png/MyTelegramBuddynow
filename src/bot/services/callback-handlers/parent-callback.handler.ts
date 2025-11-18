@@ -172,7 +172,7 @@ export class ParentCallbackHandler {
     const orderId = parseInt(parts[3]);
     const nannyId = parseInt(parts[4]);
 
-    const order = await this.usersService.getOrderById(orderId);
+    const order = await this.orderService.getOrderById(orderId);
     const nanny = await this.usersService.getById(nannyId);
 
     if (!order || !nanny) {
@@ -182,7 +182,7 @@ export class ParentCallbackHandler {
     }
 
     // Обновляем статус заказа
-    await this.usersService.updateOrderStatus(orderId, 'IN_PROGRESS');
+    await this.orderService.updateOrderStatus(orderId, 'IN_PROGRESS');
 
     // 🔹 ОТПРАВЛЯЕМ НЯНЕ УВЕДОМЛЕНИЕ О ПОДТВЕРЖДЕНИИ
     if (nanny.chatId) {
@@ -228,11 +228,11 @@ ${parentPhone}
       : '📞 Телефон няни не указан';
 
     const parentConfirmation = `
-✅ Вы подтвердили заказ!
+Договорились отлично!Теперь ты на связи с ней по телефону,чтобы обсудить все детали.
 
 ${nannyPhone}
 
-Свяжитесь с няней для уточнения деталей.
+
     `.trim();
 
     await bot.sendMessage(chatId, parentConfirmation);
@@ -260,7 +260,7 @@ ${nannyPhone}
     const orderId = parseInt(parts[3]);
     const nannyId = parseInt(parts[4]);
 
-    const order = await this.usersService.getOrderById(orderId);
+    const order = await this.orderService.getOrderById(orderId);
     const nanny = await this.usersService.getById(nannyId);
 
     if (!order || !nanny) {
@@ -270,7 +270,7 @@ ${nannyPhone}
     }
 
     // Обновляем статус заказа
-    await this.usersService.updateOrderStatus(orderId, 'CANCELLED');
+    await this.orderService.updateOrderStatus(orderId, 'CANCELLED');
 
     // Уведомляем няню об отклонении
     if (nanny.chatId) {
@@ -301,10 +301,10 @@ ${nannyPhone}
     const child = await this.usersService.getChildById(parseInt(childId));
 
     if (child) {
-      const orderData = (await this.usersService.getTempOrderData(chatId)) || {};
+      const orderData = (await this.orderService.getTempOrderData(chatId)) || {};
       orderData.child = `${child.name} (${child.age} лет)`;
       orderData.childId = child.id;
-      await this.usersService.setTempOrderData(chatId, orderData);
+      await this.orderService.setTempOrderData(chatId, orderData);
 
       // 🔹 ПЕРЕХОДИМ К ЗАДАЧАМ
       await this.usersService.setParentFSM(chatId, 'ORDER_ASK_TASKS');
@@ -668,6 +668,10 @@ ${nannyPhone}
         if (!fsmParent) {
           // await this.fsmService.handleParentMessage(bot, chatId, '', this.parentFsmSteps, false);
         }
+    }
+    if (data.startsWith('nanny_history_page_')) {
+      const page = parseInt(data.replace('nanny_history_page_', ''));
+      await this.orderService.showNannyOrderHistory(bot, chatId, user.id, page);
     }
 
     await bot.answerCallbackQuery(query.id);

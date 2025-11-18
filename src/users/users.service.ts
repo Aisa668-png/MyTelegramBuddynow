@@ -14,7 +14,6 @@ export class UsersService {
   }
 
   async createUser(chatId: string, username: string, role: Role) {
-    // Создаём или НЕ меняем роль, если пользователь уже есть
     const existing = await this.prisma.user.findUnique({
       where: { chatId },
       include: { profile: true },
@@ -26,7 +25,6 @@ export class UsersService {
       data: { chatId, username, role },
     });
 
-    // Создаём профиль только для няни, если его нет
     if (role === Role.NANNY) {
       try {
         await this.prisma.profile.create({
@@ -50,7 +48,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 FSM для родителя
   async setParentFSM(chatId: string, state: string | null) {
     await this.prisma.user.update({
       where: { chatId },
@@ -63,7 +60,6 @@ export class UsersService {
     return user?.fsmStateParent || null; // исправлено
   }
 
-  // 🔹 FSM для няни
   async setNannyFSM(chatId: string, state: string | null) {
     await this.prisma.user.update({
       where: { chatId },
@@ -113,7 +109,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 Обновить статус анкеты няни
   async updateNannyStatus(userId: number, status: ProfileStatus) {
     return this.prisma.profile.update({
       where: { userId },
@@ -121,7 +116,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 Сохранение номера телефона
   async savePhoneNumber(userId: number, phone: string) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -129,7 +123,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 Получить пользователя по ID
   async getById(userId: number) {
     return this.prisma.user.findUnique({
       where: { id: userId },
@@ -144,16 +137,13 @@ export class UsersService {
   }
 
   async saveChild(userId: number, data: { name?: string; age?: number; notes?: string }) {
-    // Проверяем, что имя есть и не пустое
     const name = data.name?.trim();
     if (!name) {
       throw new Error('Child name is required');
     }
 
-    // Если возраст не число или меньше 0, делаем null
     const age = typeof data.age === 'number' && data.age >= 0 ? data.age : null;
 
-    // Если заметки пустые, делаем null
     const notes = data.notes?.trim() || null;
 
     return this.prisma.child.create({
@@ -166,20 +156,18 @@ export class UsersService {
     });
   }
 
-  // Обновляем существующего ребёнка
   async updateChild(childId: number, data: { name?: string; age?: number; notes?: string }) {
     return this.prisma.child.update({
       where: { id: childId },
       data,
     });
   }
-  // 🔹 Получить значение флага
+
   async getFirstLoginAfterVerification(userId: number): Promise<boolean> {
     const user = await this.getById(userId);
     return user?.profile?.firstLoginAfterVerification || false;
   }
 
-  // 🔹 Установить значение флага
   async setFirstLoginAfterVerification(userId: number, value: boolean): Promise<void> {
     await this.prisma.profile.update({
       where: { userId },
@@ -243,7 +231,6 @@ export class UsersService {
     });
   }
 
-  // Получить всех детей родителя
   async getChildrenByParentId(parentId: number) {
     return this.prisma.child.findMany({
       where: { userId: parentId },
@@ -263,71 +250,6 @@ export class UsersService {
   }
 
   private tempOrderStorage = new Map<string, any>();
-
-  // В users.service.ts
-  // В users.service.ts
-  async setTempOrderData(chatId: string, data: any): Promise<void> {
-    try {
-      console.log('💾 Saving temp order data to DB:', { chatId, data });
-
-      await this.prisma.tempOrderData.upsert({
-        where: { chatId },
-        update: {
-          data: data,
-          updatedAt: new Date(),
-        },
-        create: {
-          chatId,
-          data: data,
-        },
-      });
-
-      console.log('✅ Temp order data saved to DB successfully');
-    } catch (error) {
-      console.error('❌ Error saving temp order data to DB:', error);
-      // Fallback на память
-      this.tempOrderStorage.set(chatId, data);
-    }
-  }
-
-  async getTempOrderData(chatId: string): Promise<any> {
-    try {
-      const tempData = await this.prisma.tempOrderData.findUnique({
-        where: { chatId },
-      });
-
-      if (tempData) {
-        console.log('📋 Temp order data from DB:', { chatId, data: tempData.data });
-        return tempData.data;
-      }
-
-      console.log('📋 No temp order data in DB for:', chatId);
-
-      // Fallback: проверяем память
-      const memoryData = this.tempOrderStorage.get(chatId);
-      if (memoryData) {
-        console.log('📋 Temp order data from memory:', { chatId, memoryData });
-        return memoryData;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('❌ Error getting temp order data from DB:', error);
-      return this.tempOrderStorage.get(chatId) || null;
-    }
-  }
-
-  async clearTempOrderData(chatId: string): Promise<void> {
-    try {
-      await this.prisma.tempOrderData.delete({
-        where: { chatId },
-      });
-      this.tempOrderStorage.delete(chatId);
-      console.log('🧹 Temp order data cleared for:', chatId);
-    } catch (error) {
-      console.error('❌ Error clearing temp order data:', error);
-    }
-  }
 
   async getUserChildren(userId: string): Promise<any[]> {
     // Используйте ваш существующий метод getChildrenByParentId
@@ -355,12 +277,6 @@ export class UsersService {
 
   async saveServiceFeedback(parentId: string, feedback: string) {
     console.log(`Отзыв о сервисе от пользователя ${parentId}: ${feedback}`);
-    // TODO: Реализовать сохранение в БД
-    return true;
-  }
-
-  async saveNannyFeedback(parentId: string, nannyId: string, feedback: string) {
-    console.log(`Отзыв о няне ${nannyId} от пользователя ${parentId}: ${feedback}`);
     // TODO: Реализовать сохранение в БД
     return true;
   }
@@ -405,77 +321,6 @@ export class UsersService {
     return true;
   }
 
-  // 🔹 Получить новые заказы для нянь
-  async getNewOrdersForNannies() {
-    try {
-      return await this.prisma.order.findMany({
-        where: {
-          status: 'PENDING', // Только новые заказы
-          nannyId: null, // Еще не приняты няней
-        },
-        // УБРАТЬ include пока не настроены связи
-        orderBy: { createdAt: 'desc' },
-      });
-    } catch (error) {
-      console.error('Error getting new orders:', error);
-      return [];
-    }
-  }
-
-  // 🔹 Получить заказы конкретной няни
-  async getOrdersByNanny(nannyId: string) {
-    try {
-      return await this.prisma.order.findMany({
-        where: {
-          nannyId: parseInt(nannyId),
-        },
-        include: {
-          parent: {
-            select: {
-              fullName: true,
-              phone: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-    } catch (error) {
-      console.error('Error getting nanny orders:', error);
-      return [];
-    }
-  }
-
-  async acceptOrder(orderId: number, nannyId: number) {
-    try {
-      // Получаем данные няни и заказа
-      const nanny = await this.getById(nannyId);
-      const order = await this.getOrderById(orderId);
-
-      if (!nanny || !order) {
-        throw new Error('Няня или заказ не найдены');
-      }
-
-      const updatedOrder = await this.prisma.order.update({
-        where: { id: orderId },
-        data: {
-          nannyId: nannyId,
-          status: 'ACCEPTED',
-          nannyChatId: nanny.chatId,
-          parentChatId: order.parent?.chatId,
-        },
-        include: {
-          parent: true, // 🔹 ВАЖНО: включаем родителя для получения parentId
-        },
-      });
-
-      return updatedOrder;
-    } catch (error) {
-      console.error('Error accepting order:', error);
-      throw error;
-    }
-  }
-
-  // 🔹 Получить активных нянь для уведомлений
   async getActiveNannies() {
     try {
       return await this.prisma.user.findMany({
@@ -495,246 +340,6 @@ export class UsersService {
     }
   }
 
-  // 🔹 Получить заказы няни по статусу
-  async getNannyOrdersByStatus(nannyId: string, statuses: string[]) {
-    try {
-      return await this.prisma.order.findMany({
-        where: {
-          nannyId: parseInt(nannyId),
-          status: {
-            in: statuses as any, // Используем as any чтобы обойти проверку типов
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-    } catch (error) {
-      console.error('Error getting nanny orders by status:', error);
-      return [];
-    }
-  }
-  // 🔹 Получить заказ по ID
-
-  async getOrderById(orderId: number): Promise<any> {
-    try {
-      return await this.prisma.order.findUnique({
-        where: { id: orderId },
-        include: {
-          parent: {
-            select: {
-              id: true,
-              chatId: true,
-              fullName: true,
-              phone: true,
-            },
-          },
-          nanny: {
-            include: {
-              profile: {
-                select: {
-                  name: true,
-                  experience: true,
-                },
-              },
-            },
-          },
-          review: true,
-        },
-      });
-    } catch (error) {
-      console.error('Error getting order by ID:', error);
-      throw error;
-    }
-  }
-  async getOrdersByStatus(status: string) {
-    return this.prisma.order.findMany({
-      where: {
-        status: status as any, // Используем as any для обхода типизации
-      },
-      include: {
-        parent: { select: { fullName: true } },
-        nanny: { select: { username: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getOrdersByStatuses(statuses: string[]) {
-    return this.prisma.order.findMany({
-      where: {
-        status: { in: statuses as any },
-      },
-      include: {
-        parent: { select: { fullName: true } },
-        nanny: { select: { username: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // 🔹 Обновить статус заказа
-  async updateOrderStatus(orderId: number, status: OrderStatus): Promise<any> {
-    try {
-      return await this.prisma.order.update({
-        where: { id: orderId },
-        data: { status },
-      });
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      throw error;
-    }
-  }
-
-  // 🔹 СОЗДАНИЕ ОТЗЫВА
-  async createReview(data: {
-    orderId: number;
-    nannyId: number;
-    parentId: number;
-    rating: number;
-    comment?: string;
-  }) {
-    // Проверяем, существует ли уже отзыв для этого заказа
-    const existingReview = await this.prisma.review.findUnique({
-      where: { orderId: data.orderId },
-    });
-
-    if (existingReview) {
-      throw new Error('Отзыв для этого заказа уже существует');
-    }
-
-    // Создаем отзыв
-    const review = await this.prisma.review.create({
-      data: {
-        orderId: data.orderId,
-        nannyId: data.nannyId,
-        parentId: data.parentId,
-        rating: data.rating,
-        comment: data.comment,
-      },
-    });
-
-    // Обновляем рейтинг няни
-    await this.updateNannyRating(data.nannyId);
-
-    return review;
-  }
-
-  // 🔹 ОБНОВЛЕНИЕ РЕЙТИНГА НЯНИ
-  async updateNannyRating(nannyId: number) {
-    const stats = await this.prisma.review.aggregate({
-      where: { nannyId },
-      _avg: { rating: true },
-      _count: { rating: true },
-    });
-
-    await this.prisma.user.update({
-      where: { id: nannyId },
-      data: {
-        avgRating: stats._avg.rating || 0,
-        totalReviews: stats._count.rating || 0,
-      },
-    });
-  }
-
-  // 🔹 ПОЛУЧЕНИЕ ОТЗЫВОВ НЯНИ
-  async getNannyReviews(nannyId: number) {
-    return this.prisma.review.findMany({
-      where: { nannyId },
-      include: {
-        parent: {
-          select: {
-            fullName: true,
-            phone: true,
-          },
-        },
-        order: {
-          select: {
-            date: true,
-            time: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // 🔹 ЗАВЕРШЕНИЕ ЗАКАЗА НЯНЕЙ
-  async completeOrder(orderId: number, nannyId: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new Error('Заказ не найден');
-    }
-
-    if (order.nannyId !== nannyId) {
-      throw new Error('Вы не можете завершить этот заказ');
-    }
-
-    if (order.status !== 'ACCEPTED' && order.status !== 'IN_PROGRESS') {
-      throw new Error('Нельзя завершить заказ с текущим статусом');
-    }
-
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-      },
-    });
-  }
-
-  // 🔹 ПОЛУЧЕНИЕ АКТИВНЫХ ЗАКАЗОВ НЯНИ
-  async getNannyActiveOrders(nannyId: number) {
-    return this.prisma.order.findMany({
-      where: {
-        nannyId: nannyId,
-        status: {
-          in: ['ACCEPTED', 'IN_PROGRESS'],
-        },
-      },
-      include: {
-        parent: {
-          select: {
-            fullName: true,
-            phone: true,
-          },
-        },
-      },
-      orderBy: { date: 'asc' },
-    });
-  }
-
-  // 🔹 ПРОВЕРКА ВОЗМОЖНОСТИ ЗАВЕРШЕНИЯ
-  async canCompleteOrder(
-    orderId: number,
-    nannyId: number,
-  ): Promise<{ canComplete: boolean; reason?: string }> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { nanny: true },
-    });
-
-    if (!order) {
-      return { canComplete: false, reason: 'Заказ не найден' };
-    }
-
-    if (order.nannyId !== nannyId) {
-      return { canComplete: false, reason: 'Это не ваш заказ' };
-    }
-
-    // 🔹 ПРОВЕРКА ВРЕМЕНИ (опционально - можно добавить позже)
-    // const orderDateTime = new Date(`${order.date}T${order.time.split(' - ')[0]}`);
-    // const now = new Date();
-    // if (now < orderDateTime) {
-    //   return { canComplete: false, reason: 'Заказ еще не начался' };
-    // }
-
-    return { canComplete: true };
-  }
-
-  // 🔹 СОЗДАНИЕ ЖАЛОБЫ
-
   async createReport(data: {
     orderId: number;
     reporterId: number;
@@ -751,7 +356,6 @@ export class UsersService {
     });
   }
 
-  // 🔹 ПОЛУЧЕНИЕ ЗАВЕРШЕННЫХ ЗАКАЗОВ ДЛЯ ОЦЕНКИ
   async getCompletedOrdersForReview(parentId: number) {
     return this.prisma.order.findMany({
       where: {
@@ -767,86 +371,6 @@ export class UsersService {
         },
       },
       orderBy: { completedAt: 'desc' },
-    });
-  }
-
-  // 🔹 ОБНОВЛЕНИЕ КОММЕНТАРИЯ ОТЗЫВА
-  async updateReviewComment(reviewId: number, comment: string) {
-    return this.prisma.review.update({
-      where: { id: reviewId },
-      data: { comment },
-    });
-  }
-
-  // 🔹 ПОЛУЧЕНИЕ ОТЗЫВА ПО ID ЗАКАЗА
-  async getReviewByOrderId(orderId: number) {
-    return this.prisma.review.findUnique({
-      where: { orderId },
-    });
-  }
-
-  async getNannyStats(nannyId: number) {
-    const completedOrders = await this.prisma.order.count({
-      where: {
-        nannyId: nannyId,
-        status: 'COMPLETED',
-      },
-    });
-
-    // Сумма часов из всех завершенных заказов
-    const hoursResult = await this.prisma.order.aggregate({
-      where: {
-        nannyId: nannyId,
-        status: 'COMPLETED',
-      },
-      _sum: {
-        duration: true,
-      },
-    });
-
-    // Количество уникальных родителей
-    const uniqueParents = await this.prisma.order.groupBy({
-      by: ['parentId'],
-      where: {
-        nannyId: nannyId,
-        status: 'COMPLETED',
-      },
-      _count: {
-        parentId: true,
-      },
-    });
-
-    // Родители с более чем 1 заказом (лояльные клиенты)
-    const loyalParents = uniqueParents.filter((parent) => parent._count.parentId > 1).length;
-
-    // Общее количество часов (используем реальную сумму duration)
-    const totalHours = hoursResult._sum.duration || completedOrders * 3;
-
-    return {
-      completedOrders,
-      uniqueParents: uniqueParents.length,
-      loyalParents,
-      totalHours: Math.round(totalHours),
-    };
-  }
-
-  async getRecentNannyReviews(nannyId: number, limit: number = 3) {
-    return this.prisma.review.findMany({
-      where: { nannyId },
-      include: {
-        parent: {
-          select: {
-            fullName: true,
-          },
-        },
-        order: {
-          select: {
-            date: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
     });
   }
 
@@ -936,38 +460,6 @@ export class UsersService {
     });
   }
 
-  async getAllOrders() {
-    return this.prisma.order.findMany({
-      include: {
-        parent: { select: { fullName: true } },
-        nanny: { select: { username: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async getPlatformStats() {
-    const [totalUsers, totalNannies, totalParents, pendingProfiles, totalOrders, completedOrders] =
-      await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.user.count({ where: { role: Role.NANNY } }),
-        this.prisma.user.count({ where: { role: Role.PARENT } }),
-        this.prisma.profile.count({ where: { status: ProfileStatus.PENDING } }),
-        this.prisma.order.count(),
-        this.prisma.order.count({ where: { status: 'COMPLETED' } }),
-      ]);
-
-    return {
-      totalUsers,
-      totalNannies,
-      totalParents,
-      pendingModeration: pendingProfiles,
-      totalOrders,
-      completedOrders,
-      completionRate: totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : '0',
-    };
-  }
-
   async getUserCount(): Promise<number> {
     return this.prisma.user.count();
   }
@@ -978,10 +470,6 @@ export class UsersService {
 
   async getProfileCountByStatus(status: ProfileStatus): Promise<number> {
     return this.prisma.profile.count({ where: { status } });
-  }
-
-  async getOrderCount(): Promise<number> {
-    return this.prisma.order.count();
   }
 
   async getAllNanniesWithPagination(skip: number, take: number) {

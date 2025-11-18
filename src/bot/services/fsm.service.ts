@@ -247,17 +247,14 @@ export class FsmService {
     fsmState: string,
     user: any,
   ): Promise<void> {
-    const orderData = (await this.usersService.getTempOrderData(chatId)) || {};
+    const orderData = (await this.orderService.getTempOrderData(chatId)) || {};
 
     switch (fsmState) {
       case 'ORDER_ASK_DATE':
         orderData.date = text;
-        await this.usersService.setTempOrderData(chatId, orderData);
+        await this.orderService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_ASK_TIME');
-        await bot.sendMessage(
-          chatId,
-          '⏰ Укажите время начала и окончания визита няни? (например: 14:00 - 18:00)',
-        );
+        await bot.sendMessage(chatId, 'Напишите время начала и окончания визита няни?');
         break;
 
       case 'ORDER_ASK_TIME':
@@ -269,7 +266,7 @@ export class FsmService {
           input: text,
           calculated: calculatedHours,
         });
-        await this.usersService.setTempOrderData(chatId, orderData);
+        await this.orderService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_SELECT_CHILD');
 
         const children = await this.usersService.getUserChildren(user.id);
@@ -281,9 +278,13 @@ export class FsmService {
             { text: '➕ Добавить нового ребенка', callback_data: 'add_new_child' },
           ]);
 
-          await bot.sendMessage(chatId, '👶 Выберите ребенка из списка или добавьте нового:', {
-            reply_markup: { inline_keyboard: childButtons },
-          });
+          await bot.sendMessage(
+            chatId,
+            'Укажите имя и возраст ребенка.Если при регистрации вы указывали данные ребенка,то выберите его из списка.',
+            {
+              reply_markup: { inline_keyboard: childButtons },
+            },
+          );
         } else {
           await this.usersService.setParentFSM(chatId, 'ORDER_ASK_CHILD');
           await bot.sendMessage(chatId, '👶 Укажите имя и возраст ребенка:');
@@ -292,7 +293,7 @@ export class FsmService {
 
       case 'ORDER_ASK_CHILD':
         orderData.child = text;
-        await this.usersService.setTempOrderData(chatId, orderData);
+        await this.orderService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_ASK_TASKS');
         await bot.sendMessage(
           chatId,
@@ -302,14 +303,14 @@ export class FsmService {
 
       case 'ORDER_ASK_TASKS':
         orderData.tasks = text;
-        await this.usersService.setTempOrderData(chatId, orderData);
+        await this.orderService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_ASK_ADDRESS');
-        await bot.sendMessage(chatId, '🏠 Укажите адрес куда нужно приехать:');
+        await bot.sendMessage(chatId, '🏠 Укажите адрес куда няне нужно приехать?');
         break;
 
       case 'ORDER_ASK_ADDRESS':
         orderData.address = text;
-        await this.usersService.setTempOrderData(chatId, orderData);
+        await this.orderService.setTempOrderData(chatId, orderData);
         await this.usersService.setParentFSM(chatId, 'ORDER_CONFIRM');
 
         // Показываем сводку заказа для подтверждения
@@ -350,7 +351,7 @@ export class FsmService {
 
           // Очищаем FSM и временные данные
           await this.usersService.setParentFSM(chatId, null);
-          await this.usersService.clearTempOrderData(chatId);
+          await this.orderService.clearTempOrderData(chatId);
 
           await bot.sendMessage(
             chatId,

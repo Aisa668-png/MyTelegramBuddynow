@@ -4,19 +4,22 @@ import { UsersService } from 'src/users/users.service';
 import { MessageService } from './message.service';
 import { BOT_CONSTANTS } from '../config/constants';
 import { Role, OrderStatus } from 'generated/prisma';
+import { OrderService } from './order.service';
+import { ReviewService } from './review.service';
+import { ParentCallbackHandler } from './callback-handlers/parent-callback.handler';
 
 @Injectable()
 export class HandlerService {
   constructor(
     private readonly usersService: UsersService,
     private readonly messageService: MessageService,
+    private readonly orderService: OrderService,
+    private readonly reviewService: ReviewService,
+    private readonly parentCallbackHandler: ParentCallbackHandler,
   ) {}
 
   private constants = BOT_CONSTANTS;
 
-  /**
-   * 🎯 Обработчик callback запросов
-   */
   async handleCallbackQuery(bot: TelegramBot, query: CallbackQuery): Promise<void> {
     const chatId = query.message?.chat.id.toString();
     if (!chatId || !query.data) {
@@ -59,9 +62,6 @@ export class HandlerService {
     }
   }
 
-  /**
-   * ✅ Обработчик принятия заказа няней (РЕАЛЬНАЯ ЛОГИКА)
-   */
   private async handleAcceptOrder(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -72,7 +72,7 @@ export class HandlerService {
       const chatId = query.message?.chat.id.toString();
       if (!chatId) return;
 
-      const updatedOrder = await this.usersService.acceptOrder(orderId, user.id);
+      const updatedOrder = await this.orderService.acceptOrder(orderId, user.id);
       const parent = await this.usersService.getById(updatedOrder.parentId);
       const nanny = await this.usersService.getById(user.id);
       const nannyProfile = nanny?.profile;
@@ -142,9 +142,6 @@ ${ratingText}
     }
   }
 
-  /**
-   * ✅ Обработчик завершения визита (РЕАЛЬНАЯ ЛОГИКА)
-   */
   private async handleCompleteVisit(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -156,16 +153,16 @@ ${ratingText}
       if (!chatId) return;
 
       // 1. Проверяем возможность завершения
-      const check = await this.usersService.canCompleteOrder(orderId, user.id);
+      const check = await this.orderService.canCompleteOrder(orderId, user.id);
       if (!check.canComplete) {
         throw new Error(check.reason);
       }
 
       // 2. Завершаем заказ
-      const completedOrder = await this.usersService.completeOrder(orderId, user.id);
+      const completedOrder = await this.orderService.completeOrder(orderId, user.id);
 
       // 3. Получаем полные данные заказа для уведомлений
-      const orderWithDetails = await this.usersService.getOrderById(orderId);
+      const orderWithDetails = await this.orderService.getOrderById(orderId);
 
       if (!orderWithDetails) {
         throw new Error('Заказ не найден');
@@ -204,12 +201,6 @@ ${nannyName} сообщила об окончании визита.
     }
   }
 
-  /**
-   * ⭐ Обработчик оценки от родителя (РЕАЛЬНАЯ ЛОГИКА)
-   */
-  /**
-   * ⭐ Обработчик оценки от родителя (РЕАЛЬНАЯ ЛОГИКА)
-   */
   private async handleReview(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -221,14 +212,14 @@ ${nannyName} сообщила об окончании визита.
     if (!chatId) return;
 
     try {
-      const order = await this.usersService.getOrderById(orderId);
+      const order = await this.orderService.getOrderById(orderId);
       if (!order || !order.nannyId) {
         await bot.sendMessage(chatId, '❌ Ошибка: заказ не найден');
         return;
       }
 
       // Сохраняем рейтинг
-      const review = await this.usersService.createReview({
+      const review = await this.reviewService.createReview({
         orderId,
         nannyId: order.nannyId,
         parentId: order.parentId,
@@ -266,9 +257,6 @@ ${nannyName} сообщила об окончании визита.
     }
   }
 
-  /**
-   * 👤 Обработчик подтверждения заказа родителем (РЕАЛЬНАЯ ЛОГИКА)
-   */
   private async handleParentConfirmOrder(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -280,7 +268,7 @@ ${nannyName} сообщила об окончании визита.
     if (!chatId) return;
 
     try {
-      const order = await this.usersService.getOrderById(orderId);
+      const order = await this.orderService.getOrderById(orderId);
       const nanny = await this.usersService.getById(nannyId);
 
       if (!order || !nanny) {
@@ -289,7 +277,7 @@ ${nannyName} сообщила об окончании визита.
       }
 
       // Обновляем статус заказа
-      await this.usersService.updateOrderStatus(orderId, OrderStatus.IN_PROGRESS);
+      await this.orderService.updateOrderStatus(orderId, OrderStatus.IN_PROGRESS);
 
       // 🔹 ОТПРАВЛЯЕМ НЯНЕ УВЕДОМЛЕНИЕ О ПОДТВЕРЖДЕНИИ
       if (nanny.chatId) {
@@ -335,16 +323,32 @@ ${parentPhone}
         : '📞 Телефон няни не указан';
 
       const parentConfirmation = `
-✅ Вы подтвердили заказ!
+Договорились отлично!Теперь ты на связи с ней по телефону,чтобы обсудить все детали.
 
 ${nannyPhone}
 
-Свяжитесь с няней для уточнения деталей.
+
     `.trim();
 
       await bot.sendMessage(chatId, parentConfirmation);
 
-      // 🔹 НЕ УДАЛЯЕМ ИСХОДНОЕ СООБЩЕНИЕ С ПРОФИЛЕМ НЯНИ
+      const stepsMessage = `
+📋 *Напоминание о важных моментах взаимодействия с няней:*
+
+• Обязательно расскажите, что можно и нельзя делать во время визита
+• Оставьте экстренные контакты
+• На всякий случай сообщаем вам, что за договоренности не через сайт мы лишаем бебиситтеров возможности работать с нами
+• Помните, пожалуйста, об этом, когда будете пытаться договориться с ними
+
+💳 *Как оплатить услуги?*
+• Работа ситтера оплачивается непосредственно ему в конце визита
+• Услуги сервиса Помогатор оплачиваются отдельно, так как мы не хотим удерживать комиссию у няни
+• В конце визита мы попросим вас подтвердить окончание заказа и дадим ссылку для оплаты
+• Подробнее о тарифах вы можете ознакомиться в меню
+`.trim();
+
+      await bot.sendMessage(chatId, stepsMessage);
+
       if (query.message && 'message_id' in query.message) {
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [] },
@@ -361,12 +365,9 @@ ${nannyPhone}
     }
   }
 
-  /**
-   * 🔹 ЗАПРОС ОТЗЫВА ПОСЛЕ ЗАВЕРШЕНИЯ ВИЗИТА
-   */
   private async requestReview(bot: TelegramBot, parentChatId: string, orderId: number) {
     try {
-      const order = await this.usersService.getOrderById(orderId);
+      const order = await this.orderService.getOrderById(orderId);
       if (!order || !order.nannyId) {
         console.error('Order or nanny not found for review request');
         return;

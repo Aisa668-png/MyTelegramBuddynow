@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
 import { FsmService } from '../fsm.service';
 import { RatingService } from '../rating.service';
+import { OrderService } from '../order.service';
+import { ReviewService } from '../review.service';
 
 @Injectable()
 export class ParentMessageHandler {
@@ -10,6 +12,8 @@ export class ParentMessageHandler {
     private readonly usersService: UsersService,
     private readonly fsmService: FsmService,
     private readonly ratingService: RatingService,
+    private readonly orderService: OrderService,
+    private readonly reviewService: ReviewService,
   ) {}
 
   async handle(
@@ -68,7 +72,7 @@ export class ParentMessageHandler {
       });
 
       // Сохраняем время и РАССЧИТАННУЮ длительность
-      await this.usersService.setTempOrderData(chatId, {
+      await this.orderService.setTempOrderData(chatId, {
         time: timeInput,
         duration: calculatedHours,
       });
@@ -111,7 +115,7 @@ export class ParentMessageHandler {
         }
 
         // Сохраняем РУЧНУЮ длительность
-        await this.usersService.setTempOrderData(chatId, {
+        await this.orderService.setTempOrderData(chatId, {
           duration: customDuration,
         });
       }
@@ -228,10 +232,7 @@ export class ParentMessageHandler {
           console.log(`✅ Обрабатываем имя ребенка: ${text}`);
           await this.usersService.saveChild(user.id, { name: text });
           await this.usersService.setParentFSM(chatId, 'ASK_CHILD_AGE');
-          await bot.sendMessage(
-            chatId,
-            '✅ Имя ребенка сохранено! Укажите возраст вашего ребёнка:',
-          );
+          await bot.sendMessage(chatId, 'Укажите возраст ребёнка?');
           return true;
 
         case 'ASK_CHILD_AGE':
@@ -249,7 +250,7 @@ export class ParentMessageHandler {
           await this.usersService.setParentFSM(chatId, 'ASK_CHILD_NOTES');
           await bot.sendMessage(
             chatId,
-            '✅ Возраст сохранен! Расскажите о особенностях вашего ребёнка (аллергии, привычки и т.д.):',
+            'Есть ли важные особенности,которые нужно знать няне?(аллергия,заболевания,особенности поведения).Напишите о них в одном сообщении.Это поле не обязательное,но очень важное.Если хотите пропустить этот пункт,нажмите кнопку.',
             {
               reply_markup: {
                 inline_keyboard: [[{ text: 'Пропустить', callback_data: 'skip_child_notes' }]],
@@ -269,11 +270,15 @@ export class ParentMessageHandler {
 
           const childName = lastChildNotes?.name || 'ребенок';
           await this.usersService.setParentFSM(chatId, 'FINISH');
-          await bot.sendMessage(chatId, `✅ Готово! ${childName} добавлен в ваш профиль.`, {
-            reply_markup: {
-              inline_keyboard: [[{ text: '👶 Создать заказ', callback_data: 'create_order' }]],
+          await bot.sendMessage(
+            chatId,
+            `✅ Готово!Теперь ${childName} добавлен в ваш профиль родителя.Найдем няню?Информация о том, что первый раз услуги сервиса предоставляются бесплатно.`,
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '👶 Создать заказ', callback_data: 'create_order' }]],
+              },
             },
-          });
+          );
           return true;
       }
     }
@@ -343,7 +348,7 @@ export class ParentMessageHandler {
     }
 
     try {
-      const savedReview = await this.usersService.createReview({
+      const savedReview = await this.reviewService.createReview({
         orderId,
         nannyId,
         parentId: user.id,
@@ -430,7 +435,7 @@ export class ParentMessageHandler {
     }
 
     if (fsmParent === 'FEEDBACK_NANNY') {
-      await this.usersService.saveNannyFeedback(user.id.toString(), 'general', text);
+      //await this.usersService.saveNannyFeedback(user.id.toString(), 'general', text);
       await this.usersService.setParentFSM(chatId, null);
       await bot.sendMessage(
         chatId,

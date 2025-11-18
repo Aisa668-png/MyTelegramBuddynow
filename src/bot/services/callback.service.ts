@@ -134,7 +134,6 @@ export class CallbackService {
     }
   }
 
-  // 🔥 МЕТОД ДЛЯ ДЕАКТИВАЦИИ НЯНИ
   private async handleDeactivateNanny(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -159,7 +158,6 @@ export class CallbackService {
     }
   }
 
-  // 🔥 МЕТОД ДЛЯ РЕДАКТИРОВАНИЯ НЯНИ
   private async handleEditNanny(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -197,7 +195,6 @@ export class CallbackService {
     }
   }
 
-  // 🔥 ФОРМАТИРОВАНИЕ ПОДРОБНОГО СООБЩЕНИЯ
   private formatDetailedNannyMessage(nanny: any): string {
     const profile = nanny.profile;
     const orders = nanny.ordersAsNanny || [];
@@ -231,7 +228,6 @@ ${
   `.trim();
   }
 
-  // 🔥 МЕТОД ДЛЯ ОДОБРЕНИЯ АНКЕТЫ
   private async handleApproveProfile(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -283,7 +279,6 @@ ${
     }
   }
 
-  // 🔥 МЕТОД ДЛЯ ОТКЛОНЕНИЯ АНКЕТЫ
   private async handleRejectProfile(
     bot: TelegramBot,
     query: CallbackQuery,
@@ -326,7 +321,6 @@ ${
     }
   }
 
-  // В классе CallbackService добавьте этот метод
   async handleRegistrationCallbacks(
     bot: any,
     query: any,
@@ -336,22 +330,25 @@ ${
   ): Promise<boolean> {
     const data = query.data;
 
-    // 🔹 Обработка согласия с условиями
     if (data === 'consent_yes') {
       await this.usersService.setConsentGiven(user.id, true);
       await this.usersService.setParentFSM(chatId, 'FINISH');
-      await bot.sendMessage(chatId, '✅ Отлично! Регистрация завершена.', {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '👶 Добавить ребенка', callback_data: 'add_child' }],
-            [{ text: '⏰ Сделать позже', callback_data: 'add_child_later' }],
-          ],
+      await bot.sendMessage(
+        chatId,
+        '✅ Отлично,регистрация завершена!Чтобы в будущем создавать заказы быстрее,вы можете уже сейчас добавить данные о ваших детях.Это займет минуту.',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '👶 Добавить ребенка', callback_data: 'add_child' }],
+              [{ text: '⏰ Сделать позже', callback_data: 'add_child_later' }],
+            ],
+          },
         },
-      });
+      );
       await bot.answerCallbackQuery(query.id);
       return true;
     }
-    // 🔹 ДОБАВЬТЕ ЭТО - Обработка "Добавить ребенка"
+
     if (data === 'add_child') {
       console.log('👶 Пользователь хочет добавить ребенка');
       await this.usersService.setParentFSM(chatId, 'ASK_CHILD_NAME');
@@ -359,7 +356,7 @@ ${
       await bot.answerCallbackQuery(query.id);
       return true;
     }
-    // 🔹 Обработка "Сделать позже"
+
     if (data === 'add_child_later') {
       console.log('⏰ Пользователь отложил добавление ребенка');
       await bot.sendMessage(
@@ -374,19 +371,14 @@ ${
       await bot.answerCallbackQuery(query.id);
       return true;
     }
-    // 🔹 ДОБАВЬТЕ ЭТО - Обработка создания заказа
-    // 🔹 Обработка создания заказа
+
     if (data === 'create_order') {
       console.log('👶 Пользователь хочет создать заказ');
 
-      // Запускаем процесс создания заказа через FSM
       await this.usersService.setParentFSM(chatId, 'ORDER_ASK_DATE');
-      await this.usersService.setTempOrderData(chatId, {});
+      await this.orderService.setTempOrderData(chatId, {});
 
-      await bot.sendMessage(
-        chatId,
-        '📅 Укажите дату, когда присмотреть за ребенком (например: 15.11.2024):',
-      );
+      await bot.sendMessage(chatId, 'Укажите дату, когда нужно присмотреть за ребенком?');
       await bot.answerCallbackQuery(query.id);
       return true;
     }
@@ -421,8 +413,8 @@ ${
       const child = await this.usersService.getChildById(parseInt(childId));
 
       if (child) {
-        const orderData = await this.usersService.getTempOrderData(chatId);
-        await this.usersService.setTempOrderData(chatId, {
+        const orderData = await this.orderService.getTempOrderData(chatId);
+        await this.orderService.setTempOrderData(chatId, {
           ...orderData,
           child: `${child.name} (${child.age} лет)`,
           childId: child.id,
@@ -467,12 +459,11 @@ ${
     return await this.parentCallbackHandler.handle(bot, query, chatId, user, fsmParent);
   }
 
-  // 🔹 Метод ВНУТРИ класса
   async handleConfirmOrder(bot: any, chatId: string, user: any): Promise<void> {
     // Выносим ТОЛЬКО логику confirm_order
     console.log('🎯 confirm_order processing...');
 
-    const orderData = await this.usersService.getTempOrderData(chatId);
+    const orderData = await this.orderService.getTempOrderData(chatId);
 
     if (orderData) {
       try {
@@ -482,11 +473,15 @@ ${
 
         // Очищаем FSM и временные данные
         await this.usersService.setParentFSM(chatId, null);
-        await this.usersService.clearTempOrderData(chatId);
+        await this.orderService.clearTempOrderData(chatId);
 
-        await bot.sendMessage(chatId, '✅ Заказ создан и отправлен няням! Ожидайте откликов.', {
-          reply_markup: { remove_keyboard: true },
-        });
+        await bot.sendMessage(
+          chatId,
+          'Готово ваш заказ создан.По мере поступления откликов от бебиситтеров,мы будем присылать вам их анкеты.Статус заказа можно отслеживать в меню.',
+          {
+            reply_markup: { remove_keyboard: true },
+          },
+        );
 
         // Запускаем таймер на 1 час для уведомления об отсутствии откликов
         this.scheduleNoResponseNotification(bot, chatId, order.id);
@@ -515,8 +510,7 @@ ${
       60 * 60 * 1000,
     ); // 1 час
   }
-  // В CallbackService добавьте этот метод
-  // В CallbackService добавьте этот метод
+
   async handleRoleSelection(bot: any, query: any, chatId: string): Promise<void> {
     let role: any = null;
     if (query.data === 'role_nanny') role = 'NANNY';
@@ -546,7 +540,7 @@ ${
       // 🔹 ВОССТАНАВЛИВАЕМ ЗАПРОС НОМЕРА ТЕЛЕФОНА
       await bot.sendMessage(
         chatId,
-        'Для регистрации поделитесь, пожалуйста, вашим номером телефона:',
+        'Для регистрации нажмите пожалуйста кнопку "Поделиться номером":',
         {
           reply_markup: {
             keyboard: [[{ text: '📞 Поделиться номером', request_contact: true }]],
@@ -555,8 +549,6 @@ ${
           },
         },
       );
-
-      // 🔹 НЕ УСТАНАВЛИВАЕМ FSM - номер обработается в contact handler
     }
 
     if (role === 'NANNY') {
@@ -589,7 +581,7 @@ ${
 
     await bot.answerCallbackQuery(query.id);
   }
-  // 🔥 ДОБАВИТЬ ЭТОТ МЕТОД В КЛАСС CallbackService
+
   private getProfileStatusText(status: any): string {
     switch (status) {
       case 'NEW':

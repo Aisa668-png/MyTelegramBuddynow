@@ -1,14 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
 import { UsersService } from '../../users/users.service';
+import { OrderService } from './order.service';
+import { ReviewService } from './review.service';
 
 @Injectable()
 export class RatingService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly orderService: OrderService,
+    private readonly reviewService: ReviewService,
+  ) {}
 
-  /**
-   * ⭐ Показать рейтинг няни
-   */
   async showNannyRating(bot: TelegramBot, chatId: string, nannyId: number): Promise<void> {
     try {
       const nanny = await this.usersService.getById(nannyId);
@@ -17,8 +20,8 @@ export class RatingService {
         return;
       }
 
-      const nannyStats = await this.usersService.getNannyStats(nannyId);
-      const reviews = await this.usersService.getNannyReviews(nannyId);
+      const nannyStats = await this.orderService.getNannyStats(nannyId);
+      const reviews = await this.reviewService.getNannyReviews(nannyId);
 
       let message = `⭐ *Ваш рейтинг:* ${nanny.avgRating?.toFixed(1) || '0.0'}/5\n`;
       message += `📊 *На основе отзывов:* ${nanny.totalReviews || 0}\n\n`;
@@ -65,9 +68,9 @@ export class RatingService {
     comment: string,
   ): Promise<void> {
     try {
-      const review = await this.usersService.getReviewByOrderId(orderId);
+      const review = await this.reviewService.getReviewByOrderId(orderId);
       if (review) {
-        await this.usersService.updateReviewComment(review.id, comment);
+        await this.reviewService.updateReviewComment(review.id, comment);
         await bot.sendMessage(
           chatId,
           '✅ Спасибо за ваш отзыв! Он поможет другим родителям в выборе няни.',

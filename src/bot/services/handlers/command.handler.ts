@@ -72,18 +72,27 @@ export class CommandHandler {
   }
 
   private async handleCreateOrder(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    console.log(`🔍 handleCreateOrder: проверяем роль пользователя`, user.role);
+
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+
+    if (isParent) {
+      console.log('✅ Пользователь - родитель, создаем заказ');
       await this.usersService.setParentFSM(chatId, 'ORDER_ASK_DATE');
       await bot.sendMessage(chatId, '📅 Укажите дату, когда нужно присмотреть за вашим ребенком?');
     } else {
+      console.log('❌ Пользователь не родитель:', user.role);
       await bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');
     }
   }
 
   private async handleMyProfile(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+    const isNanny = user.role === Role.NANNY || user.role === 'NANNY';
+
+    if (isParent) {
       await this.profileService.showParentProfile(bot, chatId, user);
-    } else if (user.role === 'NANNY') {
+    } else if (isNanny) {
       await this.profileService.showNannyProfile(bot, chatId, user);
     } else {
       await bot.sendMessage(chatId, '❌ Команда не доступна');
@@ -91,7 +100,9 @@ export class CommandHandler {
   }
 
   private async handleTariffs(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+
+    if (isParent) {
       await this.menuService.showTariffsMenu(bot, chatId);
     } else {
       await bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');
@@ -99,7 +110,9 @@ export class CommandHandler {
   }
 
   private async handleFeedback(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+
+    if (isParent) {
       await this.menuService.showFeedbackMenu(bot, chatId);
     } else {
       await bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');
@@ -107,17 +120,33 @@ export class CommandHandler {
   }
 
   private async handleMyOrders(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    console.log(`🔍 handleMyOrders: проверяем роль пользователя`, {
+      role: user.role,
+      type: typeof user.role,
+      RoleParent: Role.PARENT,
+      typeRoleParent: typeof Role.PARENT,
+    });
+
+    // 🔹 ПРАВИЛЬНАЯ ПРОВЕРКА (работает и с enum и со строкой)
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+    const isNanny = user.role === Role.NANNY || user.role === 'NANNY';
+
+    if (isParent) {
+      console.log('✅ Пользователь - родитель, показываем меню заказов');
       await this.menuService.showMyOrdersMenu(bot, chatId);
-    } else if (user.role === 'NANNY') {
+    } else if (isNanny) {
+      console.log('✅ Пользователь - няня, показываем меню няни');
       await this.menuService.showNannyOrdersMenu(bot, chatId);
     } else {
+      console.log('❌ Неизвестная роль:', user.role);
       await bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей и нянь');
     }
   }
 
   private async handleFaq(bot: any, chatId: string, user: any): Promise<void> {
-    if (user.role === Role.PARENT) {
+    const isParent = user.role === Role.PARENT || user.role === 'PARENT';
+
+    if (isParent) {
       await this.menuService.showFaqMenu(bot, chatId);
     } else {
       await bot.sendMessage(chatId, '❌ Эта команда доступна только для родителей');

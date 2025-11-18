@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
 import { OrderService } from '../order.service';
 import { RatingService } from '../rating.service';
+import { ReviewService } from '../review.service';
 
 @Injectable()
 export class NannyCallbackHandler {
@@ -10,6 +11,7 @@ export class NannyCallbackHandler {
     private readonly usersService: UsersService,
     private readonly orderService: OrderService,
     private readonly ratingService: RatingService,
+    private readonly reviewService: ReviewService,
   ) {}
 
   async handle(bot: any, query: any, chatId: string, user: any): Promise<boolean> {
@@ -40,8 +42,8 @@ export class NannyCallbackHandler {
 
     try {
       // Принимаем заказ
-      const updatedOrder = await this.usersService.acceptOrder(orderId, user.id);
-      const order = await this.usersService.getOrderById(orderId);
+      const updatedOrder = await this.orderService.acceptOrder(orderId, user.id);
+      const order = await this.orderService.getOrderById(orderId);
 
       if (!order || !order.parent) {
         await bot.sendMessage(chatId, '❌ Ошибка: заказ не найден.');
@@ -58,8 +60,8 @@ export class NannyCallbackHandler {
         return true;
       }
 
-      const nannyStats = await this.usersService.getNannyStats(user.id);
-      const recentReviews = await this.usersService.getRecentNannyReviews(user.id, 2);
+      const nannyStats = await this.orderService.getNannyStats(user.id);
+      const recentReviews = await this.reviewService.getRecentNannyReviews(user.id, 2);
 
       // 🔹 ФОРМИРУЕМ ТЕКСТ С РЕЙТИНГОМ И СТАТИСТИКОЙ
       const ratingText = nanny.avgRating
@@ -186,7 +188,7 @@ ${reviewsText}
 
     try {
       // Получаем данные заказа
-      const order = await this.usersService.getOrderById(orderId);
+      const order = await this.orderService.getOrderById(orderId);
       if (!order) {
         await bot.sendMessage(chatId, '❌ Заказ не найден.');
         await bot.answerCallbackQuery(query.id);
@@ -194,7 +196,7 @@ ${reviewsText}
       }
 
       // Обновляем статус заказа на "Завершен"
-      await this.usersService.updateOrderStatus(orderId, 'COMPLETED');
+      await this.orderService.updateOrderStatus(orderId, 'COMPLETED');
 
       // 🔹 УВЕДОМЛЯЕМ РОДИТЕЛЯ
       const parent = await this.usersService.getById(order.parentId);
@@ -286,7 +288,7 @@ ${reviewsText}
         break;
 
       case 'nanny_orders_history':
-        await bot.sendMessage(chatId, '✅ Раздел "История заказов" в разработке');
+        await this.orderService.showNannyOrderHistory(bot, chatId, user.id);
         break;
 
       case 'medcard_yes':

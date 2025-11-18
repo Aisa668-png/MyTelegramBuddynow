@@ -2,10 +2,14 @@ import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
 import { UsersService } from '../../users/users.service';
 import { ProfileStatus, Role } from 'generated/prisma';
+import { OrderService } from './order.service';
 
 @Injectable()
 export class AdminHandlerService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly orderService: OrderService,
+  ) {}
 
   // 🔥 ГЛАВНОЕ МЕНЮ АДМИНА
   async showAdminPanel(bot: TelegramBot, chatId: string): Promise<void> {
@@ -112,7 +116,7 @@ export class AdminHandlerService {
   }
 
   async showNewOrders(bot: TelegramBot, chatId: string): Promise<void> {
-    const newOrders = await this.usersService.getNewOrdersForNannies();
+    const newOrders = await this.orderService.getNewOrdersForNannies();
 
     if (newOrders.length === 0) {
       await bot.sendMessage(chatId, '📦 Новых заказов нет');
@@ -147,7 +151,7 @@ export class AdminHandlerService {
   }
 
   async showStats(bot: TelegramBot, chatId: string): Promise<void> {
-    const stats = await this.usersService.getPlatformStats();
+    const stats = await this.orderService.getPlatformStats();
     const message = this.formatStatsMessage(stats);
     await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
   }
@@ -160,12 +164,12 @@ export class AdminHandlerService {
     let orders;
 
     if (status === 'all') {
-      orders = await this.usersService.getAllOrders();
+      orders = await this.orderService.getAllOrders();
     } else if (status === 'active') {
       // 🔥 АКТИВНЫЕ ЗАКАЗЫ - PENDING, ACCEPTED, IN_PROGRESS
-      orders = await this.usersService.getOrdersByStatuses(['PENDING', 'ACCEPTED', 'IN_PROGRESS']);
+      orders = await this.orderService.getOrdersByStatuses(['PENDING', 'ACCEPTED', 'IN_PROGRESS']);
     } else {
-      orders = await this.usersService.getOrdersByStatus(status);
+      orders = await this.orderService.getOrdersByStatus(status);
     }
 
     if (orders.length === 0) {
@@ -207,7 +211,7 @@ export class AdminHandlerService {
   }
 
   async showOrdersStats(bot: TelegramBot, chatId: string): Promise<void> {
-    const allOrders = await this.usersService.getAllOrders();
+    const allOrders = await this.orderService.getAllOrders();
 
     if (allOrders.length === 0) {
       await bot.sendMessage(chatId, '📊 Заказов нет');

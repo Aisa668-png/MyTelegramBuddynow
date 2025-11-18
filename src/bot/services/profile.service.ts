@@ -7,9 +7,6 @@ import { Role, ProfileStatus } from '../../../generated/prisma';
 export class ProfileService {
   constructor(private readonly usersService: UsersService) {}
 
-  /**
-   * 👤 Показывает профиль родителя
-   */
   async showParentProfile(bot: TelegramBot, chatId: string, user: any): Promise<void> {
     try {
       const children = await this.usersService.getChildrenByParentId(user.id);
@@ -42,9 +39,6 @@ export class ProfileService {
     }
   }
 
-  /**
-   * 👤 Показывает профиль няни
-   */
   async showNannyProfile(bot: TelegramBot, chatId: string, user: any): Promise<void> {
     try {
       await this.usersService.ensureProfileForNanny(user.id);
@@ -72,9 +66,6 @@ export class ProfileService {
     }
   }
 
-  /**
-   * 📋 Форматирует профиль няни в красивое сообщение
-   */
   private formatNannyProfile(profile: any, user: any): string {
     const name = profile.name || 'Не указано';
     const occupation = profile.occupation || 'Не указана';
@@ -92,9 +83,6 @@ export class ProfileService {
   `.trim();
   }
 
-  /**
-   * 🔄 Получает текстовое представление статуса няни
-   */
   private getNannyStatusText(status: ProfileStatus): string {
     const statusMap = {
       [ProfileStatus.NEW]: '🆕 Новая анкета',
@@ -105,9 +93,6 @@ export class ProfileService {
     return statusMap[status] || 'Неизвестно';
   }
 
-  /**
-   * ✏️ Обработчик редактирования профиля няни
-   */
   async handleEditNannyProfile(bot: TelegramBot, query: CallbackQuery): Promise<void> {
     try {
       if (!query.message) {
@@ -143,9 +128,6 @@ export class ProfileService {
     }
   }
 
-  /**
-   * 🔹 Вспомогательный метод для форматирования телефона
-   */
   private formatPhone(phone: string): string {
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length === 11) {
