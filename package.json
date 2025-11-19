@@ -17,8 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
-    
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prisma:generate": "npx prisma generate",
+    "prisma:db-push": "npx prisma db push",
+    "postinstall": "npm run prisma:generate",
+    "railway:build": "npm run build && npm run prisma:generate",
+    "railway:start": "npm run start:prod"
   
   
   },
