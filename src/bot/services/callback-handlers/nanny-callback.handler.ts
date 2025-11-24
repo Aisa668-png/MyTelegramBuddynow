@@ -4,6 +4,7 @@ import { UsersService } from 'src/users/users.service';
 import { OrderService } from '../order.service';
 import { RatingService } from '../rating.service';
 import { ReviewService } from '../review.service';
+import { PaymentsService } from '../payments.service';
 
 @Injectable()
 export class NannyCallbackHandler {
@@ -12,6 +13,7 @@ export class NannyCallbackHandler {
     private readonly orderService: OrderService,
     private readonly ratingService: RatingService,
     private readonly reviewService: ReviewService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async handle(bot: any, query: any, chatId: string, user: any): Promise<boolean> {
@@ -187,7 +189,6 @@ ${reviewsText}
     const orderId = parseInt(data.replace('complete_visit_', ''));
 
     try {
-      // Получаем данные заказа
       const order = await this.orderService.getOrderById(orderId);
       if (!order) {
         await bot.sendMessage(chatId, '❌ Заказ не найден.');
@@ -198,56 +199,70 @@ ${reviewsText}
       // Обновляем статус заказа на "Завершен"
       await this.orderService.updateOrderStatus(orderId, 'COMPLETED');
 
-      // 🔹 УВЕДОМЛЯЕМ РОДИТЕЛЯ
+      // 🔹 УВЕДОМЛЯЕМ РОДИТЕЛЯ - СНАЧАЛА ОПЛАТА
       const parent = await this.usersService.getById(order.parentId);
       if (parent?.chatId) {
-        const completionMessage = `
-✅ Визит няни завершен!
-Пожалуйста, оставьте отзыв о работе няни.
-        `.trim();
+        const amount = await this.calculateOrderAmount(order);
 
-        const reviewKeyboard = {
+        // 🔹 ИСПОЛЬЗУЕМ PaymentsService ДЛЯ СОЗДАНИЯ ПЛАТЕЖА
+        const payment = await this.paymentsService.createPayment(
+          amount,
+          `Оплата заказа #${orderId}`,
+          `order_${orderId}`,
+        );
+
+        // 🔹 СОЗДАЕМ КНОПКУ С ССЫЛКОЙ ИЗ PaymentsService
+        const paymentKeyboard = {
           inline_keyboard: [
             [
               {
-                text: '⭐ Оставить отзыв',
-                callback_data: `leave_review_${orderId}_${order.nannyId}`,
+                text: '💳 Оплатить сейчас',
+                url: payment.confirmation.confirmation_url, // Ссылка из заглушки!
               },
             ],
           ],
         };
+        // 🔹 СРАЗУ ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ОБ ОПЛАТЕ
+        await bot.sendMessage(
+          parent.chatId,
+          `💳 *Заказ #${orderId} завершен!*\n\n💰 К оплате: ${amount} руб.\n\nДля оплаты перейдите в раздел "Мои заказы" → "Активные заказы".`,
+          { parse_mode: 'Markdown', reply_markup: paymentKeyboard },
+        );
 
-        await bot.sendMessage(parent.chatId, completionMessage, {
-          parse_mode: 'Markdown',
-          reply_markup: reviewKeyboard,
-        });
-
-        // ЧЕРЕЗ 3 СЕКУНДЫ ОТПРАВЛЯЕМ ТАРИФЫ
+        // 🔹 ЧЕРЕЗ 5 СЕКУНД - ПРЕДЛАГАЕМ ОТЗЫВ
         setTimeout(async () => {
-          const tariffsMessage = `
-💰 Выберите тип оплаты:
-          `.trim();
+          const completionMessage = `
+✅ Визит няни завершен!
+Пожалуйста, оставьте отзыв о работе няни.
+        `.trim();
 
-          await bot.sendMessage(parent.chatId, tariffsMessage, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  { text: '💳 Разовая оплата', callback_data: 'one_time_payment' },
-                  { text: '🔔 Подписка', callback_data: 'subscription' },
-                ],
+          const reviewKeyboard = {
+            inline_keyboard: [
+              [
+                {
+                  text: '⭐ Оставить отзыв',
+                  callback_data: `leave_review_${orderId}_${order.nannyId}`,
+                },
               ],
-            },
+            ],
+          };
+
+          await bot.sendMessage(parent.chatId, completionMessage, {
+            parse_mode: 'Markdown',
+            reply_markup: reviewKeyboard,
           });
-        }, 3000);
+        }, 5000); // 5 секунд задержки
       }
 
-      // 🔹 ОБНОВЛЯЕМ СООБЩЕНИЕ У НЯНИ (убираем кнопку)
-      await bot.editMessageText('✅ Вы завершили визит! Ожидайте отзыв от родителя.', {
-        chat_id: chatId,
-        message_id: query.message?.message_id,
-        parse_mode: 'Markdown',
-      });
+      // 🔹 ОБНОВЛЯЕМ СООБЩЕНИЕ У НЯНИ
+      await bot.editMessageText(
+        '✅ Вы завершили визит! Родитель получил уведомление об оплате и отзыве.',
+        {
+          chat_id: chatId,
+          message_id: query.message?.message_id,
+          parse_mode: 'Markdown',
+        },
+      );
 
       await bot.answerCallbackQuery(query.id, { text: '✅ Заказ завершен!' });
     } catch (error: any) {
@@ -257,6 +272,14 @@ ${reviewsText}
     }
 
     return true;
+  }
+  private async calculateOrderAmount(order: any): Promise<number> {
+    const nanny = await this.usersService.getById(order.nannyId);
+    const hourlyRate = nanny?.profile?.price || 500;
+
+    const durationHours = order.duration;
+
+    return hourlyRate * durationHours;
   }
 
   private async handleMenuActions(

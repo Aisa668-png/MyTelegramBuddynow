@@ -23,8 +23,6 @@
     "postinstall": "npm run prisma:generate",
     "railway:build": "npm run build && npm run prisma:generate",
     "railway:start": "npm run start:prod"
-  
-  
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -34,7 +32,8 @@
     "@prisma/client": "^6.16.0",
     "node-telegram-bot-api": "^0.63.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "yookassa": "^0.1.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

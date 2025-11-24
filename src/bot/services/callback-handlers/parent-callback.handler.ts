@@ -4,6 +4,7 @@ import { UsersService } from 'src/users/users.service';
 import { FsmService } from '../fsm.service';
 import { MenuService } from '../menu.service';
 import { OrderService } from '../order.service';
+import { PaymentsService } from '../payments.service';
 
 @Injectable()
 export class ParentCallbackHandler {
@@ -12,6 +13,7 @@ export class ParentCallbackHandler {
     private readonly fsmService: FsmService,
     private readonly menuService: MenuService,
     private readonly orderService: OrderService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async handle(bot: any, query: any, chatId: string, user: any, fsmParent: any): Promise<boolean> {
@@ -422,46 +424,40 @@ ${nannyPhone}
         break;
 
       case 'one_time_payment':
-        const oneTimeText = `
-💳 Разовая оплата
-
-Преимущества:
-• Доступ на 30 дней
-• Все функции включены
-• Поддержка 24/7
-• Возможность продления
-
-Стоимость: 500 руб.
-
-Для оплаты используйте команду /create_order
-        `;
-        await bot.sendMessage(chatId, oneTimeText.trim(), {
-          reply_markup: {
-            inline_keyboard: [[{ text: '💳 Оплатить', callback_data: 'create_order' }]],
-          },
-        });
+        const lastCompletedOrder = await this.orderService.getLastCompletedOrderByParent(user.id);
+        if (lastCompletedOrder) {
+          await this.startPaymentProcess(bot, chatId, lastCompletedOrder);
+        } else {
+          await bot.sendMessage(chatId, '❌ У вас нет завершенных заказов для оплаты.');
+        }
         break;
 
       case 'subscription':
-        const subscriptionText = `
-🔔 Подписка
-
-Преимущества:
-• Ежемесячный доступ
-• Автопродление
-• Скидка 10% при оплате за 3 месяца
-• Приоритетная поддержка
-• Эксклюзивные функции
-
-Стоимость: 400 руб./месяц
-
-Для оформления подписки используйте команду /create_order
-        `;
-        await bot.sendMessage(chatId, subscriptionText.trim(), {
-          reply_markup: {
-            inline_keyboard: [[{ text: '🔔 Оформить подписку', callback_data: 'create_order' }]],
+        await bot.sendMessage(
+          chatId,
+          '🔔 Подписка временно недоступна. Используйте разовую оплату.',
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: '💳 Разовая оплата', callback_data: 'one_time_payment' }]],
+            },
           },
-        });
+        );
+        break;
+
+      case 'create_payment':
+        await this.handleCreatePayment(bot, query, chatId, data);
+        break;
+
+      case 'check_payment':
+        await this.handleCheckPayment(bot, query, chatId, data);
+        break;
+
+      case 'mock_success':
+        await this.handleMockSuccess(bot, query, chatId, data);
+        break;
+
+      case 'mock_failed':
+        await this.handleMockFailed(bot, query, chatId, data);
         break;
 
       case 'back_to_tariffs':
@@ -676,6 +672,107 @@ ${nannyPhone}
 
     await bot.answerCallbackQuery(query.id);
     return true;
+  }
+
+  private async startPaymentProcess(bot: any, parentChatId: string, order: any) {
+    try {
+      const amount = await this.calculateOrderAmount(order);
+
+      const paymentMessage = `
+💳 *Оплата заказа #${order.id}*
+
+👶 Услуга: Присмотр за ребенком
+💰 Сумма: ${amount} руб.
+⏱️ Продолжительность: ${order.duration || 2} часа
+
+*Для завершения заказа произведите оплату*
+    `.trim();
+
+      await bot.sendMessage(parentChatId, paymentMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: '💳 Оплатить картой',
+                callback_data: `create_payment_${order.id}_${amount}`,
+              },
+            ],
+          ],
+        },
+      });
+    } catch (error) {
+      console.error('Error starting payment process:', error);
+    }
+  }
+
+  private async handleCreatePayment(bot: any, query: any, chatId: string, data: string) {
+    const [_, orderId, amount] = data.split('_');
+
+    try {
+      const payment = await this.paymentsService.createPayment(
+        parseInt(amount),
+        `Оплата заказа #${orderId}`,
+        orderId,
+      );
+
+      await bot.sendMessage(
+        chatId,
+        `
+🎯 **ТЕСТОВЫЙ ПЛАТЕЖ**
+
+Сумма: ${amount} руб.
+Статус: Ожидает оплаты
+
+*Это тестовая система - деньги не списываются*
+    `.trim(),
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '✅ Имитировать успешную оплату',
+                  callback_data: `mock_success_${orderId}`,
+                },
+              ],
+              [{ text: '❌ Имитировать отмену оплаты', callback_data: `mock_failed_${orderId}` }],
+            ],
+          },
+        },
+      );
+
+      await bot.answerCallbackQuery(query.id);
+    } catch (error) {
+      console.error('Error creating payment:', error);
+    }
+  }
+  private async handleCheckPayment(bot: any, query: any, chatId: string, data: string) {
+    const orderId = data.replace('check_payment_', '');
+    await bot.sendMessage(chatId, '🔄 Проверяем статус оплаты...');
+    // Здесь будет реальная проверка статуса платежа
+    await bot.answerCallbackQuery(query.id);
+  }
+
+  private async calculateOrderAmount(order: any): Promise<number> {
+    const nanny = await this.usersService.getById(order.nannyId);
+    const hourlyRate = nanny?.profile?.price || 500;
+
+    const durationHours = order.duration;
+
+    return hourlyRate * durationHours;
+  }
+
+  private async handleMockSuccess(bot: any, query: any, chatId: string, data: string) {
+    const orderId = data.replace('mock_success_', '');
+    await bot.sendMessage(chatId, '✅ Тест: оплата прошла успешно! Заказ оплачен.');
+    await bot.answerCallbackQuery(query.id);
+  }
+
+  private async handleMockFailed(bot: any, query: any, chatId: string, data: string) {
+    const orderId = data.replace('mock_failed_', '');
+    await bot.sendMessage(chatId, '❌ Тест: оплата не прошла. Попробуйте еще раз.');
+    await bot.answerCallbackQuery(query.id);
   }
 
   private async handleActiveOrders(bot: any, chatId: string, user: any): Promise<void> {

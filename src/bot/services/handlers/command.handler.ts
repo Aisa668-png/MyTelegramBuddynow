@@ -25,10 +25,6 @@ export class CommandHandler {
         await this.handleCreateOrder(bot, chatId, user);
         break;
 
-      case '/my_profile':
-        await this.handleMyProfile(bot, chatId, user);
-        break;
-
       case '/tariffs':
         await this.handleTariffs(bot, chatId, user);
         break;
@@ -57,8 +53,8 @@ export class CommandHandler {
         await this.handleMyRating(bot, chatId, user);
         break;
 
-      case '/edit_profile':
-        await this.handleEditProfile(bot, chatId, user);
+      case '/my_profile':
+        await this.handleMyProfile(bot, chatId, user);
         break;
 
       case '/support':

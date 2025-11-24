@@ -750,4 +750,31 @@ export class OrderService {
       completionRate: totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : '0',
     };
   }
+
+  async getLastCompletedOrderByParent(parentId: number): Promise<any> {
+    try {
+      const order = await this.prismaService.order.findFirst({
+        where: {
+          parentId: parentId,
+          status: 'COMPLETED', // Ищем завершенные заказы
+        },
+        orderBy: {
+          createdAt: 'desc', // Берем последний
+        },
+        include: {
+          nanny: {
+            include: {
+              profile: true,
+            },
+          },
+          parent: true,
+        },
+      });
+
+      return order;
+    } catch (error) {
+      console.error('Error getting last completed order:', error);
+      return null;
+    }
+  }
 }
