@@ -20,6 +20,7 @@ import { AdminHandlerService } from './services/admin-handler.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { ReviewService } from './services/review.service';
 import { PaymentsService } from './services/payments.service';
+import { YookassaService } from './services/yookassa.service';
 @Module({
   imports: [UsersModule, PrismaModule],
   providers: [
@@ -42,6 +43,7 @@ import { PaymentsService } from './services/payments.service';
     AdminCommandHandler,
     ReviewService,
     PaymentsService,
+    YookassaService,
   ],
   exports: [BotService, AdminHandlerService, AdminCommandHandler, ReviewService, PaymentsService],
 })

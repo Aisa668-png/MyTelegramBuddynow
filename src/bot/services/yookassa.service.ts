@@ -1,20 +1,29 @@
 import { Injectable } from '@nestjs/common';
-import * as yookassa from 'yookassa';
-
+const yookassa = require('yookassa');
 @Injectable()
 export class YookassaService {
   private yooKassa;
 
   constructor() {
     // Проверяем что ключи есть
-    if (!process.env.YUKASSA_SHOP_ID || !process.env.YUKASSA_SECRET_KEY) {
-      throw new Error('ЮKassa ключи не настроены!');
+    //if (!process.env.YUKASSA_SHOP_ID || !process.env.YUKASSA_SECRET_KEY) {
+    // throw new Error('ЮKassa ключи не настроены!');
+    //}
+    if (process.env.YUKASSA_SHOP_ID && process.env.YUKASSA_SECRET_KEY) {
+      this.yooKassa = yookassa({
+        shopId: process.env.YUKASSA_SHOP_ID,
+        secretKey: process.env.YUKASSA_SECRET_KEY,
+      });
+      console.log('✅ ЮKassa инициализирован');
+    } else {
+      console.warn('⚠️ ЮKassa ключи не настроены, платежи отключены');
+      this.yooKassa = null;
     }
 
-    this.yooKassa = yookassa({
-      shopId: process.env.YUKASSA_SHOP_ID,
-      secretKey: process.env.YUKASSA_SECRET_KEY,
-    });
+    //this.yooKassa = yookassa({
+    //shopId: process.env.YUKASSA_SHOP_ID,
+    //secretKey: process.env.YUKASSA_SECRET_KEY,
+    //});
   }
 
   async createPayment(amount: number, description: string, orderId: string) {
@@ -42,7 +51,6 @@ export class YookassaService {
 
       console.log(`✅ Платеж создан: ${payment.id}`);
       return payment;
-
     } catch (error) {
       console.error('❌ Ошибка создания платежа:', error);
       throw new Error('Не удалось создать платеж в ЮKassa');
